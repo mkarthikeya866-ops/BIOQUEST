@@ -19,22 +19,22 @@ export const CompletionRewardModal: React.FC<CompletionRewardModalProps> = ({
   const [showIntegrationSpec, setShowIntegrationSpec] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 overflow-y-auto">
-      <div className="max-w-3xl w-full bg-[#080f1e] border border-emerald-500/50 rounded-xl overflow-hidden shadow-2xl my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2.5 sm:p-4">
+      <div className="max-w-3xl w-full max-h-[92dvh] overflow-y-auto terminal-scroll bg-[#080f1e] border border-emerald-500/50 rounded-xl shadow-2xl">
         {/* Top Banner */}
-        <div className="px-7 py-6 bg-[#071c1b] border-b border-emerald-500/35 text-center">
-          <p className="font-mono-data text-xs tracking-[0.2em] text-emerald-400 mb-2">
+        <div className="px-4 py-5 sm:px-7 sm:py-6 bg-[#071c1b] border-b border-emerald-500/35 text-center">
+          <p className="font-mono-data text-[11px] sm:text-xs tracking-[0.18em] sm:tracking-[0.2em] text-emerald-400 mb-2">
             LOCKDOWN LIFTED · FACILITY POWER RESTORED
           </p>
-          <h2 className="font-display text-3xl md:text-4xl font-bold text-white">
+          <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-white">
             BIOQUEST MISSION COMPLETE
           </h2>
-          <p className="text-sm text-emerald-100/85 mt-2 max-w-xl mx-auto">
+          <p className="text-xs sm:text-sm text-emerald-100/85 mt-2 max-w-xl mx-auto">
             All five authentication keys verified. Corrupted pipeline job BQ-409 has been purged and legitimate candidate BQ-714 is queued for wet-lab EGFR assay validation.
           </p>
         </div>
 
-        <div className="p-6 md:p-7 space-y-6">
+        <div className="p-4 sm:p-6 md:p-7 space-y-5 sm:space-y-6">
           {/* Five Collected Keys Row */}
           <div>
             <p className="text-xs font-mono-data text-slate-400 mb-3">

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createFacilityTextures, FacilityTextures } from './facilityTextures';
-import { VAULTS, ATRIUM_INCIDENT_LOGS, FAILED_EXPERIMENTS } from '../data/vaultData';
+import { VAULTS } from '../data/vaultData';
 import { CinematicSceneId, GamePhase, InteractableTarget, VaultId } from '../types/game';
 
 interface BoxCollider {
@@ -28,23 +28,40 @@ interface VaultVisual {
 
 interface InteractableNode {
   id: string;
-  kind: 'vault' | 'log' | 'nexus' | 'exit' | 'monument' | 'experiment';
+  kind: 'vault' | 'nexus' | 'exit' | 'monument';
   position: THREE.Vector3;
   radius: number;
   label: string;
   sublabel: string;
   vaultId?: VaultId;
-  logId?: string;
-  experimentId?: string;
 }
 
 interface ExperimentPodVisual {
   id: string;
+  x: number;
+  z: number;
+  rotY: number;
   specimen: THREE.Group;
+  head: THREE.Group;
   light: THREE.PointLight;
   ringMat: THREE.MeshStandardMaterial;
   baseColorHex: string;
   phaseOffset: number;
+}
+
+interface DanglingFixture {
+  pivot: THREE.Group;
+  tubeMat: THREE.MeshStandardMaterial;
+  baseRotZ: number;
+  phase: number;
+  speed: number;
+  tipPos: [number, number, number];
+}
+
+interface CatwalkStalker {
+  group: THREE.Group;
+  eyeMat: THREE.MeshBasicMaterial;
+  phase: number;
 }
 
 interface ChemicalLeakZone {
@@ -84,14 +101,18 @@ const _move = new THREE.Vector3();
 const _toNode = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 const _lookTarget = new THREE.Vector3();
-const _bgDark = new THREE.Color('#04070d');
+const _bgDark = new THREE.Color('#0c1526');
 const _bgModern = new THREE.Color('#8ecae6');
-const _bgCurrent = new THREE.Color('#04070d');
-const _fogHorror = new THREE.Color('#071012');
-const _hemiSkyDark = new THREE.Color('#5eead4');
+const _bgCurrent = new THREE.Color('#0c1526');
+const _fogHorror = new THREE.Color('#10192b');
+const _hemiSkyDark = new THREE.Color('#bae6fd');
 const _hemiSkyModern = new THREE.Color('#e0f2fe');
-const _hemiGndDark = new THREE.Color('#080b12');
+const _hemiGndDark = new THREE.Color('#1e293b');
 const _hemiGndModern = new THREE.Color('#94a3b8');
+const _cyanColor = new THREE.Color('#22d3ee');
+const _cyanEmissive = new THREE.Color('#06b6d4');
+const _horrorRedColor = new THREE.Color('#450a0a');
+const _horrorRedEmissive = new THREE.Color('#b91c1c');
 
 const FIREWORK_SLOTS = 5;
 const PARTICLES_PER_FIREWORK = 64;
@@ -185,21 +206,31 @@ export class LabSceneEngine {
   private pendingFireworkQueue: Array<{ delay: number; x: number; y: number; z: number; scale: number }> = [];
   private autoFireworkCooldown = 2.4;
 
-  // Horror atmosphere: Headlamp, Failed Experiments, Chemical Leaks & Rising Fumes
+  // Horror atmosphere: Headlamp, Dynamic Strip Materials, Failed Experiments, Breached Pods, Stalkers & Volumetric Mist
   private headlamp!: THREE.SpotLight;
   private headlampTarget!: THREE.Object3D;
+  private floorGuideMat!: THREE.MeshStandardMaterial;
+  private ceilingLedMat!: THREE.MeshStandardMaterial;
   private experimentPods: Map<string, ExperimentPodVisual> = new Map();
+  private breachedPodLights: THREE.PointLight[] = [];
+  private danglingFixtures: DanglingFixture[] = [];
+  private catwalkStalkers: CatwalkStalker[] = [];
   private chemicalLeaks: ChemicalLeakZone[] = [];
   private fumePoints!: THREE.Points;
   private fumePositions!: Float32Array;
   private fumeOrigins!: Float32Array;
   private fumeSpeeds!: Float32Array;
   private fumeMat!: THREE.PointsMaterial;
+  private mistPoints!: THREE.Points;
+  private mistPositions!: Float32Array;
+  private mistOrigins!: Float32Array;
+  private mistMat!: THREE.PointsMaterial;
   private fumeCheckAccum = 0;
   private lastReportedPpm = -1;
   private lastReportedSmell: string | null = null;
   private hissCooldown = 0;
-  private ambientCreakTimer = 11.5;
+  private ambientCreakTimer = 7.0;
+  private horrorSparkTimer = 4.5;
 
   // State
   private phase: GamePhase = 'cinematic';
@@ -209,7 +240,6 @@ export class LabSceneEngine {
   private lastCinematicScene: CinematicSceneId = 1;
   private completedVaults: Set<VaultId> = new Set();
   private placedKeys: Set<VaultId> = new Set();
-  private resolvedExperiments: Set<string> = new Set();
   private mainDoorOpen = false;
   private facilityRestored = false;
 
@@ -224,6 +254,11 @@ export class LabSceneEngine {
   private isDraggingLook = false;
   private lastDragX = 0;
   private lastDragY = 0;
+  private virtualMoveX = 0;
+  private virtualMoveZ = 0;
+  private lookTouchId: number | null = null;
+  private lastTouchX = 0;
+  private lastTouchY = 0;
   private currentHover: InteractableTarget | null = null;
 
   // Animation loop
@@ -239,6 +274,9 @@ export class LabSceneEngine {
   private onMouseMoveBound: (e: MouseEvent) => void;
   private onMouseDownBound: (e: MouseEvent) => void;
   private onMouseUpBound: () => void;
+  private onTouchStartBound: (e: TouchEvent) => void;
+  private onTouchMoveBound: (e: TouchEvent) => void;
+  private onTouchEndBound: (e: TouchEvent) => void;
   private onPointerLockChangeBound: () => void;
   private onContextLostBound: (e: Event) => void;
 
@@ -258,6 +296,7 @@ export class LabSceneEngine {
     this.renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight);
     this.renderer.shadowMap.enabled = !this.isSoftwareGl;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -272,7 +311,7 @@ export class LabSceneEngine {
     pmremGenerator.dispose();
 
     const aspect = (container.clientWidth || window.innerWidth) / (container.clientHeight || window.innerHeight);
-    this.camera = new THREE.PerspectiveCamera(64, aspect, 0.1, 240);
+    this.camera = new THREE.PerspectiveCamera(aspect < 0.85 ? 74 : 64, aspect, 0.1, 240);
     this.camera.rotation.order = 'YXZ';
 
     this.textures = createFacilityTextures(this.renderer.capabilities.getMaxAnisotropy());
@@ -293,22 +332,30 @@ export class LabSceneEngine {
       this.renderer.compile(this.scene, this.camera);
     }
 
-    // Bind events
+    // Bind events (Desktop Keyboard/Mouse + Mobile Multi-Touch Look)
     this.onResizeBound = this.handleResize.bind(this);
     this.onKeyDownBound = this.handleKeyDown.bind(this);
     this.onKeyUpBound = this.handleKeyUp.bind(this);
     this.onMouseMoveBound = this.handleMouseMove.bind(this);
     this.onMouseDownBound = this.handleMouseDown.bind(this);
     this.onMouseUpBound = this.handleMouseUp.bind(this);
+    this.onTouchStartBound = this.handleTouchStart.bind(this);
+    this.onTouchMoveBound = this.handleTouchMove.bind(this);
+    this.onTouchEndBound = this.handleTouchEnd.bind(this);
     this.onPointerLockChangeBound = this.handlePointerLockChange.bind(this);
     this.onContextLostBound = (e: Event) => e.preventDefault();
 
     window.addEventListener('resize', this.onResizeBound);
+    window.addEventListener('orientationchange', this.onResizeBound);
     window.addEventListener('keydown', this.onKeyDownBound);
     window.addEventListener('keyup', this.onKeyUpBound);
     window.addEventListener('mousemove', this.onMouseMoveBound);
     this.renderer.domElement.addEventListener('mousedown', this.onMouseDownBound);
     window.addEventListener('mouseup', this.onMouseUpBound);
+    this.renderer.domElement.addEventListener('touchstart', this.onTouchStartBound, { passive: true });
+    this.renderer.domElement.addEventListener('touchmove', this.onTouchMoveBound, { passive: false });
+    this.renderer.domElement.addEventListener('touchend', this.onTouchEndBound, { passive: true });
+    this.renderer.domElement.addEventListener('touchcancel', this.onTouchEndBound, { passive: true });
     document.addEventListener('pointerlockchange', this.onPointerLockChangeBound);
     this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLostBound);
 
@@ -385,14 +432,14 @@ export class LabSceneEngine {
       this.scene.add(group);
       this.beaconRotors.push(group);
 
-      const redLight = new THREE.PointLight('#ef4444', 0, 22, 1.5);
+      const redLight = new THREE.PointLight('#dc2626', 0, 32, 1.35);
       redLight.position.set(x, y - 0.8, z);
       this.scene.add(redLight);
       this.emergencyLights.push(redLight);
     }
 
-    // First-Person Tactical Suit Headlamp (active inside dark locked lab, fades out in Modern World)
-    this.headlamp = new THREE.SpotLight('#d8f3ff', 0, 26, Math.PI / 5.2, 0.55, 1.45);
+    // First-Person Tactical Suit Flashlight (razor-sharp survival-horror beam cutting through pitch darkness)
+    this.headlamp = new THREE.SpotLight('#e0f4ff', 0, 38, Math.PI / 6.5, 0.55, 1.25);
     this.headlampTarget = new THREE.Object3D();
     this.scene.add(this.headlamp);
     this.scene.add(this.headlampTarget);
@@ -464,8 +511,8 @@ export class LabSceneEngine {
     floor.receiveShadow = !this.isSoftwareGl;
     this.scene.add(floor);
 
-    // Glowing recessed floor navigation guide strips connecting NEXUS to all 5 Vaults & the Main Door
-    const guideMat = this.track(
+    // Glowing recessed floor navigation guide strips (shifts to sinister blood-red during lockdown!)
+    this.floorGuideMat = this.track(
       new THREE.MeshStandardMaterial({
         color: '#22d3ee',
         emissive: '#06b6d4',
@@ -473,28 +520,28 @@ export class LabSceneEngine {
         roughness: 0.25,
       })
     );
-    const northGuide = new THREE.Mesh(this.track(new THREE.BoxGeometry(0.32, 0.03, 32)), guideMat);
+    const northGuide = new THREE.Mesh(this.track(new THREE.BoxGeometry(0.32, 0.03, 32)), this.floorGuideMat);
     northGuide.position.set(0, 0.015, -3.5);
     this.scene.add(northGuide);
 
-    const crossGuide1 = new THREE.Mesh(this.track(new THREE.BoxGeometry(36, 0.03, 0.24)), guideMat);
+    const crossGuide1 = new THREE.Mesh(this.track(new THREE.BoxGeometry(36, 0.03, 0.24)), this.floorGuideMat);
     crossGuide1.position.set(0, 0.015, 8.5);
     this.scene.add(crossGuide1);
 
-    const crossGuide2 = new THREE.Mesh(this.track(new THREE.BoxGeometry(36, 0.03, 0.24)), guideMat);
+    const crossGuide2 = new THREE.Mesh(this.track(new THREE.BoxGeometry(36, 0.03, 0.24)), this.floorGuideMat);
     crossGuide2.position.set(0, 0.015, -6.5);
     this.scene.add(crossGuide2);
 
     // Towering Ceiling
-    const ceilMat = this.track(new THREE.MeshStandardMaterial({ color: '#09101d', roughness: 0.7, metalness: 0.4 }));
+    const ceilMat = this.track(new THREE.MeshStandardMaterial({ color: '#06090f', roughness: 0.78, metalness: 0.35 }));
     const ceiling = new THREE.Mesh(this.track(new THREE.PlaneGeometry(labW, labD)), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = labH;
     this.scene.add(ceiling);
 
-    // Soaring Structural Ceiling Arches & LED Light Ribbons
-    const trussMat = this.track(new THREE.MeshStandardMaterial({ color: '#1b263b', metalness: 0.78, roughness: 0.32 }));
-    const stripMat = this.track(
+    // Soaring Structural Ceiling Arches & LED Light Ribbons (killed during horror blackout!)
+    const trussMat = this.track(new THREE.MeshStandardMaterial({ color: '#141a24', metalness: 0.72, roughness: 0.42 }));
+    this.ceilingLedMat = this.track(
       new THREE.MeshStandardMaterial({
         color: '#a5f3fc',
         emissive: '#22d3ee',
@@ -508,7 +555,7 @@ export class LabSceneEngine {
       const beam = new THREE.Mesh(beamGeo, trussMat);
       beam.position.set(0, labH - 0.3, z);
       this.scene.add(beam);
-      const led = new THREE.Mesh(ledGeo, stripMat);
+      const led = new THREE.Mesh(ledGeo, this.ceilingLedMat);
       led.position.set(0, labH - 0.58, z);
       this.scene.add(led);
     }
@@ -945,21 +992,6 @@ export class LabSceneEngine {
         maxZ: b.z + 0.95,
         active: true,
       });
-
-      if (b.logIdx !== undefined) {
-        const log = ATRIUM_INCIDENT_LOGS[b.logIdx];
-        if (log) {
-          this.interactables.push({
-            id: `terminal-${log.id}`,
-            kind: 'log',
-            position: new THREE.Vector3(b.x, 1.35, b.z),
-            radius: 3.4,
-            label: log.title,
-            sublabel: `${log.classification} · Inspect Terminal`,
-            logId: log.id,
-          });
-        }
-      }
     }
   }
 
@@ -1320,9 +1352,6 @@ export class LabSceneEngine {
     const spillPlaneGeo = this.track(new THREE.PlaneGeometry(3.8, 3.8));
 
     podPlacements.forEach((p, idx) => {
-      const exp = FAILED_EXPERIMENTS.find((e) => e.id === p.id);
-      if (!exp) return;
-
       const group = new THREE.Group();
       group.position.set(p.x, 0, p.z);
       group.rotation.y = p.rotY;
@@ -1358,19 +1387,67 @@ export class LabSceneEngine {
         group.add(strut);
       }
 
-      // Suspended failed biological/crystallized specimen inside the glass tank
+      // Suspended creepy mutated humanoid silhouette inside the glass tank (eyes track the player!)
       const specimen = new THREE.Group();
-      specimen.position.y = 2.1;
-      const knot = new THREE.Mesh(
-        this.track(new THREE.TorusKnotGeometry(0.32, 0.1, 42, 7, 2, 3 + (idx % 2))),
-        specimenBodyMat
+      specimen.position.y = 2.15;
+
+      // Gaunt contorted torso & spine
+      const spine = new THREE.Mesh(this.track(new THREE.CylinderGeometry(0.16, 0.11, 1.15, 8)), specimenBodyMat);
+      spine.position.y = -0.1;
+      specimen.add(spine);
+
+      // Mutated exposed ribcage rings
+      for (let r = 0; r < 4; r++) {
+        const rib = new THREE.Mesh(this.track(new THREE.TorusGeometry(0.24 - r * 0.02, 0.035, 6, 12)), specimenNodeMat);
+        rib.rotation.x = Math.PI / 2 + 0.15;
+        rib.position.y = 0.22 - r * 0.17;
+        specimen.add(rib);
+      }
+
+      // Elongated twisted arms clawing toward the glass
+      const armGeo = this.track(new THREE.CylinderGeometry(0.045, 0.032, 0.95, 6));
+      for (const side of [-1, 1]) {
+        const arm = new THREE.Mesh(armGeo, specimenBodyMat);
+        arm.position.set(side * 0.28, 0.05, 0.22);
+        arm.rotation.z = side * 0.42;
+        arm.rotation.x = -0.68;
+        specimen.add(arm);
+      }
+
+      // Sunken mutated cranium + piercing glowing pinpoint eyes that track the player!
+      const head = new THREE.Group();
+      head.position.set(0, 0.64, 0.04);
+      const cranium = new THREE.Mesh(this.track(new THREE.DodecahedronGeometry(0.22, 1)), specimenBodyMat);
+      cranium.scale.set(0.88, 1.22, 0.95);
+      head.add(cranium);
+
+      const eyeColor = p.spillType === 'green' ? '#bef264' : '#ff1e38';
+      const eyeMat = this.track(new THREE.MeshBasicMaterial({ color: eyeColor }));
+      const eyeGeo = this.track(new THREE.SphereGeometry(0.032, 8, 8));
+      const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+      leftEye.position.set(-0.075, 0.03, 0.19);
+      const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+      rightEye.position.set(0.075, 0.03, 0.19);
+      head.add(leftEye, rightEye);
+      specimen.add(head);
+
+      // Creeping dark organic bio-vein tendrils spilling out under the containment pod
+      const tendrilMat = this.track(
+        new THREE.MeshStandardMaterial({
+          color: '#1f0b0e',
+          emissive: p.spillType === 'green' ? '#365314' : '#7f1d1d',
+          emissiveIntensity: 0.45,
+          roughness: 0.25,
+        })
       );
-      specimen.add(knot);
-      for (let n = 0; n < 4; n++) {
-        const blister = new THREE.Mesh(this.track(new THREE.DodecahedronGeometry(0.11, 0)), specimenNodeMat);
-        const a = (n * Math.PI) / 2;
-        blister.position.set(Math.cos(a) * 0.34, (n - 1.5) * 0.22, Math.sin(a) * 0.34);
-        specimen.add(blister);
+      const tendrilGeo = this.track(new THREE.CylinderGeometry(0.025, 0.085, 2.2, 6));
+      for (let t = 0; t < 5; t++) {
+        const ang = (t * Math.PI * 2) / 5 + idx * 0.4;
+        const tendril = new THREE.Mesh(tendrilGeo, tendrilMat);
+        tendril.position.set(Math.cos(ang) * 1.35, 0.04, Math.sin(ang) * 1.35);
+        tendril.rotation.z = Math.PI / 2;
+        tendril.rotation.y = -ang;
+        group.add(tendril);
       }
 
       // Cracked biohazard warning sign plate on pedestal front
@@ -1378,11 +1455,11 @@ export class LabSceneEngine {
       plate.position.set(0, 0.42, 1.15);
       plate.rotation.x = -0.18;
 
-      // Smeared frantic handprint/fingerprints pressed on the inside/outside of the glass
+      // Smeared frantic bloody handprint pressed on the glass
       const smear = new THREE.Mesh(podPrintGeo, printDecalMat);
       smear.position.set(0.08, 1.95, 0.89);
 
-      const podLight = new THREE.PointLight(p.toxicHex, 5.5, 11, 1.6);
+      const podLight = new THREE.PointLight(p.toxicHex, 8.5, 14, 1.45);
       podLight.position.set(0, 2.2, 1.15);
 
       group.add(base, cap, glass, bottomRing, topRing, specimen, plate, smear, podLight);
@@ -1406,7 +1483,11 @@ export class LabSceneEngine {
 
       this.experimentPods.set(p.id, {
         id: p.id,
+        x: p.x,
+        z: p.z,
+        rotY: p.rotY,
         specimen,
+        head,
         light: podLight,
         ringMat,
         baseColorHex: p.toxicHex,
@@ -1420,24 +1501,99 @@ export class LabSceneEngine {
         maxPpm: 215,
         smellCue: p.smellCue,
       });
-
-      this.interactables.push({
-        id: `interact-${p.id}`,
-        kind: 'experiment',
-        position: new THREE.Vector3(p.x, 1.7, p.z),
-        radius: 4.3,
-        label: `${exp.podCode} — ${exp.title}`,
-        sublabel: 'Failed Experiment · Press [E] to Audit Risk',
-        experimentId: exp.id,
-      });
     });
+
+    // 1B. TWO SHATTERED / BREACHED EMPTY CONTAINMENT PODS WITH CRIMSON BLOOD DRAG TRAILS ("SOMETHING ESCAPED")
+    const bloodTrailMat = this.track(
+      new THREE.MeshStandardMaterial({
+        map: this.textures.bloodDragTrail,
+        emissive: '#450a0a',
+        emissiveMap: this.textures.bloodDragTrail,
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: 0.92,
+        roughness: 0.14,
+        metalness: 0.12,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+      })
+    );
+    const shardMat = this.track(
+      new THREE.MeshStandardMaterial({
+        color: '#86efac',
+        roughness: 0.08,
+        metalness: 0.25,
+        transparent: true,
+        opacity: 0.55,
+      })
+    );
+    const shardGeo = this.track(new THREE.ConeGeometry(0.18, 0.42, 3));
+    const trailGeo = this.track(new THREE.PlaneGeometry(1.75, 5.8));
+
+    const breachedSpecs: Array<{ x: number; z: number; trailYaw: number }> = [
+      { x: -6.2, z: -13.5, trailYaw: 0.55 },
+      { x: 6.2, z: -13.5, trailYaw: -0.58 },
+    ];
+    for (const bp of breachedSpecs) {
+      const bGroup = new THREE.Group();
+      bGroup.position.set(bp.x, 0, bp.z);
+
+      const bBase = new THREE.Mesh(baseGeo, podMetalMat);
+      bBase.position.y = 0.36;
+      const bCap = new THREE.Mesh(capGeo, podMetalMat);
+      bCap.position.set(0.18, 3.62, 0.12);
+      bCap.rotation.z = 0.26;
+      bCap.rotation.x = 0.14;
+
+      // Only 2 bent struts remain, glass cylinder is SHATTERED and empty!
+      for (const s of [0, 1]) {
+        const ang = (s * Math.PI * 2) / 3 + 0.4;
+        const strut = new THREE.Mesh(strutGeo, podMetalMat);
+        strut.position.set(Math.cos(ang) * 0.96, 2.08, Math.sin(ang) * 0.96);
+        strut.rotation.z = s === 0 ? 0.12 : -0.08;
+        bGroup.add(strut);
+      }
+
+      // Scattered jagged glass shards around the breached empty pod
+      for (let sh = 0; sh < 7; sh++) {
+        const shard = new THREE.Mesh(shardGeo, shardMat);
+        const sa = sh * 0.95 + bp.trailYaw;
+        const sr = 1.05 + (sh % 3) * 0.42;
+        shard.position.set(Math.cos(sa) * sr, 0.06, Math.sin(sa) * sr);
+        shard.rotation.set(Math.PI / 2 + (sh % 2) * 0.3, sa, 0.4);
+        bGroup.add(shard);
+      }
+
+      const breachLight = new THREE.PointLight('#dc2626', 8.0, 12, 1.5);
+      breachLight.position.set(0, 2.4, 0.4);
+      this.breachedPodLights.push(breachLight);
+      bGroup.add(bBase, bCap, breachLight);
+      this.scene.add(bGroup);
+
+      // Long smeared crimson blood & sludge drag trail leading away into the dark shadows
+      const trail = new THREE.Mesh(trailGeo, bloodTrailMat);
+      trail.rotation.x = -Math.PI / 2;
+      trail.rotation.z = bp.trailYaw;
+      trail.position.set(bp.x - Math.sin(bp.trailYaw) * 2.8, 0.026, bp.z + Math.cos(bp.trailYaw) * 2.8);
+      this.scene.add(trail);
+
+      this.colliders.push({
+        id: `breached-pod-${bp.x}`,
+        minX: bp.x - 1.25,
+        maxX: bp.x + 1.25,
+        minZ: bp.z - 1.25,
+        maxZ: bp.z + 1.25,
+        active: true,
+      });
+    }
 
     // 2. THREE OVERTURNED LEAKING CHEMICAL DRUMS & EXTRA TOXIC PUDDLES
     const drumBodyGeo = this.track(new THREE.CylinderGeometry(0.42, 0.42, 1.25, 12));
     const drumBandGeo = this.track(new THREE.CylinderGeometry(0.44, 0.44, 0.2, 12));
-    const drumMat = this.track(new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.72, roughness: 0.38 }));
+    const drumMat = this.track(new THREE.MeshStandardMaterial({ color: '#141a24', metalness: 0.72, roughness: 0.42 }));
     const hazardBandMat = this.track(
-      new THREE.MeshStandardMaterial({ color: '#eab308', emissive: '#a16207', emissiveIntensity: 0.45, roughness: 0.4 })
+      new THREE.MeshStandardMaterial({ color: '#ca8a04', emissive: '#713f12', emissiveIntensity: 0.35, roughness: 0.45 })
     );
 
     const drumLeaks: Array<{ x: number; z: number; rotY: number; type: 'green' | 'amber'; smellCue: string }> = [
@@ -1453,7 +1609,7 @@ export class LabSceneEngine {
         z: -10.8,
         rotY: -1.1,
         type: 'amber',
-        smellCue: 'Rotten-egg mercaptan & corrosive acidic reagent spilling from ruptured drum',
+        smellCue: 'Rotten-egg mercaptan & corrosive blood-red reagent spilling from ruptured drum',
       },
       {
         x: -3.8,
@@ -1495,10 +1651,10 @@ export class LabSceneEngine {
       });
     }
 
-    // 3. FRANTIC FINGERPRINTS & HANDPRINTS SMEARED HERE AND THERE (Main Door, Glass Bay, Pillars, Workstations)
-    const wallPrintGeo = this.track(new THREE.PlaneGeometry(1.4, 1.4));
+    // 3. FRANTIC BLOODY HANDPRINTS & DRIPPING HORROR WALL SCRAWLS
+    const wallPrintGeo = this.track(new THREE.PlaneGeometry(1.5, 1.5));
 
-    // Smeared handprints on the inner faces of the locked Main Door blast shutters (someone tried to claw out!)
+    // Smeared bloody handprints on the inner faces of the locked Main Door blast shutters
     const doorPrintL = new THREE.Mesh(wallPrintGeo, printDecalMat);
     doorPrintL.position.set(0.35, -0.95, 0.21);
     this.exitShutterLeft.add(doorPrintL);
@@ -1508,15 +1664,15 @@ export class LabSceneEngine {
     doorPrintR.rotation.z = -0.24;
     this.exitShutterRight.add(doorPrintR);
 
-    // Additional smears across structural columns & South containment glass
+    // Additional claw smears across structural columns & South containment glass
     const surfacePrints: Array<{ x: number; y: number; z: number; rotY: number; rotZ: number; scale: number }> = [
-      { x: -10.5, y: 1.55, z: -9.32, rotY: 0, rotZ: 0.12, scale: 0.85 },
-      { x: 10.5, y: 1.45, z: 1.18, rotY: 0, rotZ: -0.18, scale: 0.85 },
-      { x: -10.5, y: 1.6, z: 11.68, rotY: 0, rotZ: 0.08, scale: 0.8 },
-      { x: -3.2, y: 1.5, z: 20.65, rotY: Math.PI, rotZ: -0.1, scale: 1.15 },
-      { x: 4.8, y: 1.4, z: 20.65, rotY: Math.PI, rotZ: 0.22, scale: 1.05 },
-      { x: -6.8, y: 1.25, z: 8.62, rotY: Math.PI, rotZ: 0.14, scale: 0.72 },
-      { x: 6.8, y: 1.25, z: -3.32, rotY: 0, rotZ: -0.2, scale: 0.72 },
+      { x: -10.5, y: 1.55, z: -9.32, rotY: 0, rotZ: 0.12, scale: 0.92 },
+      { x: 10.5, y: 1.45, z: 1.18, rotY: 0, rotZ: -0.18, scale: 0.92 },
+      { x: -10.5, y: 1.6, z: 11.68, rotY: 0, rotZ: 0.08, scale: 0.88 },
+      { x: -3.2, y: 1.5, z: 20.65, rotY: Math.PI, rotZ: -0.1, scale: 1.2 },
+      { x: 4.8, y: 1.4, z: 20.65, rotY: Math.PI, rotZ: 0.22, scale: 1.1 },
+      { x: -6.8, y: 1.25, z: 8.62, rotY: Math.PI, rotZ: 0.14, scale: 0.78 },
+      { x: 6.8, y: 1.25, z: -3.32, rotY: 0, rotZ: -0.2, scale: 0.78 },
     ];
     for (const sp of surfacePrints) {
       const m = new THREE.Mesh(wallPrintGeo, printDecalMat);
@@ -1526,7 +1682,120 @@ export class LabSceneEngine {
       this.scene.add(m);
     }
 
-    // 4. RISING TOXIC CHEMICAL VAPOR PLUMES (Lightweight pooled Points from all 7 leak zones)
+    // 3 Large Bloody Wall Scrawls that leap out when illuminated by the flashlight beam!
+    const scrawlGeo = this.track(new THREE.PlaneGeometry(5.6, 2.8));
+    const scrawlPlacements: Array<{ x: number; y: number; z: number; rotY: number; texIdx: number }> = [
+      { x: -21.7, y: 2.8, z: 1.2, rotY: Math.PI / 2, texIdx: 0 }, // "DON'T LOOK UP / IT IS WATCHING"
+      { x: 21.7, y: 2.8, z: 1.2, rotY: -Math.PI / 2, texIdx: 1 }, // "BREACH 2045 / DO NOT BREATHE"
+      { x: -10.4, y: 2.9, z: -20.65, rotY: 0, texIdx: 2 }, // "5 KEYS OR DIE / GET OUT NOW"
+    ];
+    for (const sc of scrawlPlacements) {
+      const scMat = this.track(
+        new THREE.MeshStandardMaterial({
+          map: this.textures.horrorWallScrawls[sc.texIdx],
+          emissive: '#450a0a',
+          emissiveMap: this.textures.horrorWallScrawls[sc.texIdx],
+          emissiveIntensity: 0.35,
+          transparent: true,
+          opacity: 0.92,
+          roughness: 0.3,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        })
+      );
+      const scMesh = new THREE.Mesh(scrawlGeo, scMat);
+      scMesh.position.set(sc.x, sc.y, sc.z);
+      scMesh.rotation.y = sc.rotY;
+      this.scene.add(scMesh);
+    }
+
+    // 4. SIX DANGLING BROKEN CEILING CABLES & SWAYING TILTED LIGHT FIXTURES
+    const cableGeo = this.track(new THREE.CylinderGeometry(0.032, 0.028, 5.4, 6));
+    const cableMat = this.track(new THREE.MeshStandardMaterial({ color: '#0a0d12', roughness: 0.75, metalness: 0.3 }));
+    const fixtureHousingGeo = this.track(new THREE.BoxGeometry(2.2, 0.14, 0.34));
+    const fixtureTubeGeo = this.track(new THREE.BoxGeometry(2.0, 0.08, 0.14));
+
+    const danglingAnchors: Array<{ x: number; z: number; rotY: number; len: number; phase: number }> = [
+      { x: -6.5, z: 9.2, rotY: 0.4, len: 5.2, phase: 0.0 },
+      { x: 7.4, z: 6.4, rotY: -0.7, len: 5.6, phase: 1.3 },
+      { x: -9.8, z: -2.4, rotY: 1.1, len: 4.8, phase: 2.5 },
+      { x: 9.6, z: -5.8, rotY: -1.3, len: 5.4, phase: 3.7 },
+      { x: -4.2, z: -15.2, rotY: 0.25, len: 5.0, phase: 4.9 },
+      { x: 4.5, z: -14.8, rotY: -0.35, len: 5.3, phase: 5.8 },
+    ];
+    for (const da of danglingAnchors) {
+      const pivot = new THREE.Group();
+      pivot.position.set(da.x, 10.6, da.z);
+      pivot.rotation.y = da.rotY;
+
+      const cable = new THREE.Mesh(cableGeo, cableMat);
+      cable.position.y = -da.len * 0.5;
+      cable.scale.y = da.len / 5.4;
+      pivot.add(cable);
+
+      const housing = new THREE.Mesh(fixtureHousingGeo, podMetalMat);
+      housing.position.set(0.35, -da.len, 0);
+      housing.rotation.z = -0.38;
+      pivot.add(housing);
+
+      const tubeMat = this.track(
+        new THREE.MeshStandardMaterial({
+          color: '#7f1d1d',
+          emissive: '#ef4444',
+          emissiveIntensity: 0.4,
+          roughness: 0.2,
+        })
+      );
+      const tube = new THREE.Mesh(fixtureTubeGeo, tubeMat);
+      tube.position.set(0.35, -da.len - 0.09, 0);
+      tube.rotation.z = -0.38;
+      pivot.add(tube);
+
+      this.scene.add(pivot);
+      this.danglingFixtures.push({
+        pivot,
+        tubeMat,
+        baseRotZ: (da.phase % 2 > 1 ? 1 : -1) * 0.08,
+        phase: da.phase,
+        speed: 0.85 + (da.phase % 0.55),
+        tipPos: [da.x, 10.6 - da.len, da.z],
+      });
+    }
+
+    // 5. TWO EERIE SHADOW STALKER SILHOUETTES ON THE UPPER MEZZANINE CATWALKS (STARE DOWN AT PLAYER!)
+    const shadowMat = this.track(new THREE.MeshBasicMaterial({ color: '#030305' }));
+    const stalkerBodyGeo = this.track(new THREE.CylinderGeometry(0.18, 0.26, 1.55, 8));
+    const stalkerHeadGeo = this.track(new THREE.SphereGeometry(0.18, 10, 10));
+    const stalkerEyeGeo = this.track(new THREE.SphereGeometry(0.028, 6, 6));
+
+    const stalkerCoords: Array<{ x: number; z: number; rotY: number; phase: number }> = [
+      { x: -19.5, z: -2.5, rotY: Math.PI / 2, phase: 0.5 },
+      { x: 19.5, z: -9.5, rotY: -Math.PI / 2, phase: 3.1 },
+    ];
+    for (const sc of stalkerCoords) {
+      const sGroup = new THREE.Group();
+      sGroup.position.set(sc.x, 6.32, sc.z);
+      sGroup.rotation.y = sc.rotY;
+
+      const torso = new THREE.Mesh(stalkerBodyGeo, shadowMat);
+      torso.position.y = 1.05;
+      const head = new THREE.Mesh(stalkerHeadGeo, shadowMat);
+      head.position.y = 2.02;
+      head.scale.set(0.85, 1.15, 0.9);
+
+      const eyeMat = this.track(new THREE.MeshBasicMaterial({ color: '#ff1f3d' }));
+      const eL = new THREE.Mesh(stalkerEyeGeo, eyeMat);
+      eL.position.set(-0.06, 2.04, 0.16);
+      const eR = new THREE.Mesh(stalkerEyeGeo, eyeMat);
+      eR.position.set(0.06, 2.04, 0.16);
+
+      sGroup.add(torso, head, eL, eR);
+      this.scene.add(sGroup);
+      this.catwalkStalkers.push({ group: sGroup, eyeMat, phase: sc.phase });
+    }
+
+    // 6. RISING TOXIC CHEMICAL VAPOR PLUMES (Soft Volumetric Sprites from all 7 leak zones)
     const fumeCount = 98;
     this.fumePositions = new Float32Array(fumeCount * 3);
     this.fumeOrigins = new Float32Array(fumeCount * 3);
@@ -1534,34 +1803,66 @@ export class LabSceneEngine {
 
     for (let i = 0; i < fumeCount; i++) {
       const leak = this.chemicalLeaks[i % this.chemicalLeaks.length];
-      const ox = leak.x + (Math.random() - 0.5) * 2.2;
-      const oz = leak.z + (Math.random() - 0.5) * 2.2;
-      const startY = 0.08 + Math.random() * 2.6;
+      const ox = leak.x + (Math.random() - 0.5) * 2.4;
+      const oz = leak.z + (Math.random() - 0.5) * 2.4;
+      const startY = 0.15 + Math.random() * 2.8;
 
       this.fumeOrigins[i * 3] = ox;
-      this.fumeOrigins[i * 3 + 1] = 0.08;
+      this.fumeOrigins[i * 3 + 1] = 0.15;
       this.fumeOrigins[i * 3 + 2] = oz;
 
       this.fumePositions[i * 3] = ox;
       this.fumePositions[i * 3 + 1] = startY;
       this.fumePositions[i * 3 + 2] = oz;
-      this.fumeSpeeds[i] = 0.28 + Math.random() * 0.34;
+      this.fumeSpeeds[i] = 0.26 + Math.random() * 0.34;
     }
 
     const fumeGeo = this.track(new THREE.BufferGeometry());
     fumeGeo.setAttribute('position', new THREE.BufferAttribute(this.fumePositions, 3));
     this.fumeMat = this.track(
       new THREE.PointsMaterial({
-        color: '#a3e635',
-        size: 0.52,
+        map: this.textures.fogSprite,
+        color: '#84cc16',
+        size: 1.55,
         transparent: true,
-        opacity: 0.24,
+        opacity: 0.32,
         depthWrite: false,
       })
     );
     this.fumePoints = new THREE.Points(fumeGeo, this.fumeMat);
     this.fumePoints.frustumCulled = false;
     this.scene.add(this.fumePoints);
+
+    // 7. THICK LOW-LYING VOLUMETRIC-STYLE 3D HORROR GROUND MIST DRIFTING ACROSS THE LAB FLOOR
+    const mistCount = 110;
+    this.mistPositions = new Float32Array(mistCount * 3);
+    this.mistOrigins = new Float32Array(mistCount * 3);
+    for (let i = 0; i < mistCount; i++) {
+      const mx = (Math.random() - 0.5) * 39;
+      const my = 0.45 + Math.random() * 1.95;
+      const mz = (Math.random() - 0.5) * 37;
+      this.mistOrigins[i * 3] = mx;
+      this.mistOrigins[i * 3 + 1] = my;
+      this.mistOrigins[i * 3 + 2] = mz;
+      this.mistPositions[i * 3] = mx;
+      this.mistPositions[i * 3 + 1] = my;
+      this.mistPositions[i * 3 + 2] = mz;
+    }
+    const mistGeo = this.track(new THREE.BufferGeometry());
+    mistGeo.setAttribute('position', new THREE.BufferAttribute(this.mistPositions, 3));
+    this.mistMat = this.track(
+      new THREE.PointsMaterial({
+        map: this.textures.fogSprite,
+        color: '#526b58',
+        size: 5.4,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+      })
+    );
+    this.mistPoints = new THREE.Points(mistGeo, this.mistMat);
+    this.mistPoints.frustumCulled = false;
+    this.scene.add(this.mistPoints);
   }
 
   private buildModernizedWorld() {
@@ -2013,8 +2314,7 @@ export class LabSceneEngine {
     completedVaults: VaultId[],
     placedKeys: VaultId[],
     mainDoorOpen: boolean,
-    facilityRestored: boolean,
-    resolvedExperiments: string[] = []
+    facilityRestored: boolean
   ) {
     this.phase = 'gameplay';
     this.cinematicRunning = false;
@@ -2035,30 +2335,27 @@ export class LabSceneEngine {
     this.camera.position.copy(this.playerPos);
     this.camera.rotation.set(0, 0, 0, 'YXZ');
 
-    this.syncProgress(completedVaults, placedKeys, mainDoorOpen, facilityRestored, resolvedExperiments);
+    this.syncProgress(completedVaults, placedKeys, mainDoorOpen, facilityRestored);
   }
 
   public syncProgress(
     completedVaults: VaultId[],
     placedKeys: VaultId[],
     mainDoorOpen: boolean,
-    facilityRestored: boolean,
-    resolvedExperiments: string[] = []
+    facilityRestored: boolean
   ) {
     this.completedVaults = new Set(completedVaults);
     this.placedKeys = new Set(placedKeys);
-    this.resolvedExperiments = new Set(resolvedExperiments);
     this.mainDoorOpen = mainDoorOpen;
     this.facilityRestored = facilityRestored;
 
-    // Shift audited containment pods from eerie toxic green/amber to stabilized cyan
-    for (const [expId, pod] of this.experimentPods.entries()) {
-      const stabilized = this.resolvedExperiments.has(expId) || mainDoorOpen;
-      const col = stabilized ? '#22d3ee' : pod.baseColorHex;
+    // Shift eerie failed containment pods to calm cyan once facility restores & Main Door opens
+    for (const pod of this.experimentPods.values()) {
+      const col = mainDoorOpen ? '#22d3ee' : pod.baseColorHex;
       pod.ringMat.color.set(col);
       pod.ringMat.emissive.set(col);
       pod.light.color.set(col);
-      pod.light.intensity = stabilized ? 4.2 : 6.2;
+      pod.light.intensity = mainDoorOpen ? 3.5 : 8.5;
     }
 
     // Disable North Main Door collider once open so player walks straight into the Modern World!
@@ -2126,8 +2423,24 @@ export class LabSceneEngine {
     this.paused = paused;
     if (paused) {
       this.keys = {};
+      this.virtualMoveX = 0;
+      this.virtualMoveZ = 0;
+      this.lookTouchId = null;
+      this.isDraggingLook = false;
       this.releasePointerLock();
     }
+  }
+
+  public setVirtualMove(x: number, z: number) {
+    this.virtualMoveX = THREE.MathUtils.clamp(x, -1, 1);
+    this.virtualMoveZ = THREE.MathUtils.clamp(z, -1, 1);
+  }
+
+  public applyLookDelta(dx: number, dy: number) {
+    if (this.phase !== 'gameplay' || this.paused) return;
+    const sensitivity = 0.0042;
+    this.yaw -= dx * sensitivity;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - dy * sensitivity, -Math.PI / 2.4, Math.PI / 2.4);
   }
 
   public requestPointerLock() {
@@ -2170,21 +2483,6 @@ export class LabSceneEngine {
     this.pitch = 0;
   }
 
-  public teleportNearExperiment(experimentId: string) {
-    const node = this.interactables.find((n) => n.kind === 'experiment' && n.experimentId === experimentId);
-    if (!node) return;
-    const toCenter = new THREE.Vector3(-node.position.x, 0, -node.position.z).normalize();
-    this.playerPos.set(
-      node.position.x + toCenter.x * 3.1,
-      1.65,
-      node.position.z + toCenter.z * 3.1
-    );
-    const dx = node.position.x - this.playerPos.x;
-    const dz = node.position.z - this.playerPos.z;
-    this.yaw = Math.atan2(-dx, -dz);
-    this.pitch = -0.02;
-  }
-
   private setMonitorsGlitched(glitched: boolean) {
     for (const mat of this.workstationMonitorMats) {
       mat.map = glitched ? this.textures.monitorGlitch : this.textures.monitorNormal;
@@ -2201,7 +2499,9 @@ export class LabSceneEngine {
   private handleResize() {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
-    this.camera.aspect = w / h;
+    const aspect = w / Math.max(1, h);
+    this.camera.fov = aspect < 0.85 ? 74 : 64;
+    this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   }
@@ -2247,6 +2547,43 @@ export class LabSceneEngine {
       this.lastDragY = e.clientY;
       this.yaw -= dx * sensitivity * 1.3;
       this.pitch = THREE.MathUtils.clamp(this.pitch - dy * sensitivity * 1.3, -Math.PI / 2.4, Math.PI / 2.4);
+    }
+  }
+
+  private handleTouchStart(e: TouchEvent) {
+    if (this.phase !== 'gameplay' || this.paused) return;
+    if (this.lookTouchId !== null) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    this.lookTouchId = touch.identifier;
+    this.lastTouchX = touch.clientX;
+    this.lastTouchY = touch.clientY;
+  }
+
+  private handleTouchMove(e: TouchEvent) {
+    if (this.phase !== 'gameplay' || this.paused) return;
+    if (this.lookTouchId === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === this.lookTouchId) {
+        e.preventDefault();
+        const dx = touch.clientX - this.lastTouchX;
+        const dy = touch.clientY - this.lastTouchY;
+        this.lastTouchX = touch.clientX;
+        this.lastTouchY = touch.clientY;
+        this.applyLookDelta(dx, dy);
+        break;
+      }
+    }
+  }
+
+  private handleTouchEnd(e: TouchEvent) {
+    if (this.lookTouchId === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === this.lookTouchId) {
+        this.lookTouchId = null;
+        break;
+      }
     }
   }
 
@@ -2347,7 +2684,17 @@ export class LabSceneEngine {
     }
 
     if (sceneId === 1) {
-      // Scene 1 (0–9s): Exterior night approach gliding into the grand 44m x 42m lab
+      // Scene 1 (0–9s): Exterior night approach gliding into the operational 2045 lab before breach
+      this.scene.environmentIntensity = 0.52;
+      this.hemiLight.intensity = 0.55;
+      this.sunLight.intensity = 0.65;
+      this.ceilingLedMat.color.copy(_cyanColor);
+      this.ceilingLedMat.emissive.copy(_cyanEmissive);
+      this.ceilingLedMat.emissiveIntensity = 0.9;
+      this.floorGuideMat.color.copy(_cyanColor);
+      this.floorGuideMat.emissive.copy(_cyanEmissive);
+      this.floorGuideMat.emissiveIntensity = 0.85;
+
       const p = THREE.MathUtils.smoothstep(t / 9.0, 0, 1);
       this.camera.position.set(
         THREE.MathUtils.lerp(6.5, 1.2, p),
@@ -2361,12 +2708,20 @@ export class LabSceneEngine {
       this.emergencyLights.forEach((l) => (l.intensity = 0));
     } else if (sceneId === 2) {
       const p = (t - 9.0) / 7.5;
-      const flicker = Math.sin(t * 38) * Math.cos(t * 21) > -0.15 ? 20 : 2.5;
-      this.mainLights.forEach((l) => (l.intensity = flicker));
-      this.emergencyLights.forEach((l) => (l.intensity = Math.max(0, Math.sin(t * 6)) * 8));
+      const powerOn = Math.sin(t * 38) * Math.cos(t * 21) > -0.1;
+      const flicker = powerOn ? 18 : 0.8;
+      this.scene.environmentIntensity = powerOn ? 0.26 : 0.05;
+      this.hemiLight.intensity = powerOn ? 0.28 : 0.08;
+      this.ceilingLedMat.emissiveIntensity = powerOn ? 0.45 : 0.03;
+      this.floorGuideMat.color.copy(_horrorRedColor);
+      this.floorGuideMat.emissive.copy(_horrorRedEmissive);
+      this.floorGuideMat.emissiveIntensity = powerOn ? 0.45 : 0.85;
 
-      const shakeX = Math.sin(t * 28) * 0.05;
-      const shakeY = Math.cos(t * 33) * 0.04;
+      this.mainLights.forEach((l) => (l.intensity = flicker));
+      this.emergencyLights.forEach((l) => (l.intensity = Math.max(0, Math.sin(t * 6.5)) * 16));
+
+      const shakeX = Math.sin(t * 28) * 0.06;
+      const shakeY = Math.cos(t * 33) * 0.05;
       this.camera.position.set(
         THREE.MathUtils.lerp(1.2, -4.2, p) + shakeX,
         THREE.MathUtils.lerp(3.0, 2.5, p) + shakeY,
@@ -2379,9 +2734,25 @@ export class LabSceneEngine {
         this.spawnSparkBurst(6.8, 2.0, 9.5);
       }
     } else if (sceneId === 3) {
+      // Scene 3: Facility Lockdown with clear visibility & red emergency beacons
       const p = Math.min(1, (t - 16.5) / 8.0);
-      this.mainLights.forEach((l) => (l.intensity = THREE.MathUtils.lerp(l.intensity, 2.0, dt * 4)));
-      const pulse = 9 + Math.sin(elapsedSec * 5.2) * 5.5;
+      this.scene.background = _fogHorror;
+      if (this.scene.fog instanceof THREE.FogExp2) {
+        this.scene.fog.color.copy(_fogHorror);
+        this.scene.fog.density = 0.014;
+      }
+      this.scene.environmentIntensity = 0.55;
+      this.hemiLight.intensity = 0.65;
+      this.sunLight.intensity = 0.75;
+      this.ceilingLedMat.color.copy(_horrorRedColor);
+      this.ceilingLedMat.emissive.copy(_horrorRedEmissive);
+      this.ceilingLedMat.emissiveIntensity = 0.75;
+      this.floorGuideMat.color.copy(_horrorRedColor);
+      this.floorGuideMat.emissive.copy(_horrorRedEmissive);
+      this.floorGuideMat.emissiveIntensity = 0.8;
+
+      this.mainLights.forEach((l) => (l.intensity = THREE.MathUtils.lerp(l.intensity, 18, dt * 4)));
+      const pulse = 14 + Math.sin(elapsedSec * 5.8) * 6.0;
       this.emergencyLights.forEach((l) => (l.intensity = pulse));
 
       const slamP = Math.min(1, p * 2.2);
@@ -2402,14 +2773,29 @@ export class LabSceneEngine {
       }
     } else if (sceneId === 4) {
       const p = Math.min(1, (t - 24.5) / 13.0);
-      this.mainLights.forEach((l) => (l.intensity = 5.0));
-      this.emergencyLights.forEach((l) => (l.intensity = 5.5 + Math.sin(elapsedSec * 2.2) * 2.0));
+      this.scene.background = _fogHorror;
+      if (this.scene.fog instanceof THREE.FogExp2) {
+        this.scene.fog.color.copy(_fogHorror);
+        this.scene.fog.density = 0.012;
+      }
+      this.scene.environmentIntensity = 0.62;
+      this.hemiLight.intensity = 0.72;
+      this.sunLight.intensity = 0.85;
+      this.ceilingLedMat.color.copy(_horrorRedColor);
+      this.ceilingLedMat.emissive.copy(_horrorRedEmissive);
+      this.ceilingLedMat.emissiveIntensity = 0.7;
+      this.floorGuideMat.color.copy(_horrorRedColor);
+      this.floorGuideMat.emissive.copy(_horrorRedEmissive);
+      this.floorGuideMat.emissiveIntensity = 0.75;
+
+      this.mainLights.forEach((l) => (l.intensity = 22));
+      this.emergencyLights.forEach((l) => (l.intensity = 10 + Math.sin(elapsedSec * 2.8) * 4.5));
 
       this.nexusActivation = Math.min(1, (t - 24.8) / 2.2);
       const glitchJitter = t < 27.5 ? (Math.random() > 0.72 ? 0.85 : 1.0) : 1.0;
       const scale = Math.max(0.001, THREE.MathUtils.smoothstep(this.nexusActivation, 0, 1) * glitchJitter);
       this.nexusGroup.scale.setScalar(scale);
-      this.nexusLight.intensity = scale * 14;
+      this.nexusLight.intensity = scale * 16;
 
       const angle = THREE.MathUtils.lerp(-0.55, 0.55, p);
       this.camera.position.set(Math.sin(angle) * 6.0, 3.0, 2.0 + Math.cos(angle) * 6.0);
@@ -2425,13 +2811,28 @@ export class LabSceneEngine {
   }
 
   private updateTitleBackdrop(_dt: number, elapsedSec: number) {
+    this.scene.background = _fogHorror;
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.copy(_fogHorror);
+      this.scene.fog.density = 0.011;
+    }
+    this.scene.environmentIntensity = 0.65;
+    this.hemiLight.intensity = 0.78;
+    this.sunLight.intensity = 0.9;
+    this.ceilingLedMat.color.copy(_horrorRedColor);
+    this.ceilingLedMat.emissive.copy(_horrorRedEmissive);
+    this.ceilingLedMat.emissiveIntensity = 0.8;
+    this.floorGuideMat.color.copy(_horrorRedColor);
+    this.floorGuideMat.emissive.copy(_horrorRedEmissive);
+    this.floorGuideMat.emissiveIntensity = 0.8;
+
     const angle = Math.sin(elapsedSec * 0.14) * 0.45;
     this.camera.position.set(Math.sin(angle) * 11.5, 4.8, 13.5 + Math.cos(angle) * 2.2);
     _lookTarget.set(0, 2.8, -6.5);
     this.camera.lookAt(_lookTarget);
 
-    this.mainLights.forEach((l) => (l.intensity = 6.5));
-    this.emergencyLights.forEach((l) => (l.intensity = 6.5 + Math.sin(elapsedSec * 2.4) * 2.5));
+    this.mainLights.forEach((l) => (l.intensity = 22));
+    this.emergencyLights.forEach((l) => (l.intensity = 12 + Math.sin(elapsedSec * 3.1) * 5.0));
   }
 
   private updateGameplay(dt: number, elapsedSec: number) {
@@ -2446,42 +2847,73 @@ export class LabSceneEngine {
     this.scene.background = _bgCurrent;
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.copy(_bgCurrent);
-      // Thicker claustrophobic toxic fog while locked inside; crisp open sky outside
-      const indoorFogDensity = isLockedDarkLab ? 0.025 : 0.013;
-      this.scene.fog.density = THREE.MathUtils.lerp(indoorFogDensity, 0.0055, this.outdoorBlend);
+      // Light clear visibility inside the facility; crisp open sky outside
+      const indoorFogDensity = 0.01;
+      this.scene.fog.density = THREE.MathUtils.lerp(indoorFogDensity, 0.005, this.outdoorBlend);
     }
+
+    // Bright, clear lighting across the entire 3D facility (no pitch-dark blackout effect)
+    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.68, 0.88, this.outdoorBlend);
+
     this.hemiLight.color.copy(_hemiSkyDark).lerp(_hemiSkyModern, this.outdoorBlend);
     this.hemiLight.groundColor.copy(_hemiGndDark).lerp(_hemiGndModern, this.outdoorBlend);
-    this.hemiLight.intensity = THREE.MathUtils.lerp(isLockedDarkLab ? 0.34 : 0.65, 1.35, this.outdoorBlend);
-    this.sunLight.intensity = THREE.MathUtils.lerp(isLockedDarkLab ? 0.38 : 0.8, 2.1, this.outdoorBlend);
+    this.hemiLight.intensity = THREE.MathUtils.lerp(0.82, 1.35, this.outdoorBlend);
+    this.sunLight.intensity = THREE.MathUtils.lerp(1.05, 2.1, this.outdoorBlend);
 
-    // Dim eerie ceiling lighting with sporadic unstable electrical flickers while locked down;
-    // brightens cleanly once Main Door opens / facility restored
-    const flickerDip =
-      isLockedDarkLab && Math.sin(elapsedSec * 23.0) * Math.sin(elapsedSec * 7.3) > 0.86 ? 0.42 : 1.0;
-    const targetMain = isLockedDarkLab ? 4.4 * flickerDip : 26;
-    const targetRed = isLockedDarkLab ? 7.8 + Math.sin(elapsedSec * 3.1) * 3.2 : 0;
-    this.mainLights.forEach((l, i) => {
-      const perLightTarget = isLockedDarkLab && i % 2 === 1 ? targetMain * 0.82 : targetMain;
-      l.intensity = THREE.MathUtils.damp(l.intensity, perLightTarget, 5, dt);
-    });
-    this.emergencyLights.forEach((l) => (l.intensity = THREE.MathUtils.damp(l.intensity, targetRed, 4, dt)));
-
-    // Sync first-person tactical headlamp to camera (illuminates dark corridors & smeared glass)
-    const targetHeadlamp = isLockedDarkLab ? 18 * (1 - this.outdoorBlend) : 0;
-    this.headlamp.intensity = THREE.MathUtils.damp(this.headlamp.intensity, targetHeadlamp, 6, dt);
-    if (this.headlamp.intensity > 0.05) {
-      this.headlamp.position.copy(this.camera.position);
-      this.camera.getWorldDirection(_camDir);
-      this.headlampTarget.position.copy(this.camera.position).addScaledVector(_camDir, 10);
+    // Keep ceiling LEDs & floor guides clearly illuminated (red alert during lockdown, cyan once restored)
+    if (isLockedDarkLab) {
+      this.ceilingLedMat.color.copy(_horrorRedColor);
+      this.ceilingLedMat.emissive.copy(_horrorRedEmissive);
+      this.ceilingLedMat.emissiveIntensity = 0.85;
+      this.floorGuideMat.color.copy(_horrorRedColor);
+      this.floorGuideMat.emissive.copy(_horrorRedEmissive);
+      this.floorGuideMat.emissiveIntensity = 0.8 + Math.sin(elapsedSec * 2.5) * 0.15;
+    } else {
+      this.ceilingLedMat.color.copy(_cyanColor);
+      this.ceilingLedMat.emissive.copy(_cyanEmissive);
+      this.ceilingLedMat.emissiveIntensity = 0.95;
+      this.floorGuideMat.color.copy(_cyanColor);
+      this.floorGuideMat.emissive.copy(_cyanEmissive);
+      this.floorGuideMat.emissiveIntensity = 0.9;
     }
 
-    // Sparse ambient horror metallic creaks while trapped in the dark lab
+    // Well-lit overhead ceiling lights + crimson emergency accents while locked
+    const targetMain = isLockedDarkLab ? 24 : 28;
+    this.mainLights.forEach((l) => {
+      l.intensity = THREE.MathUtils.damp(l.intensity, targetMain, 6, dt);
+    });
+    this.emergencyLights.forEach((l, idx) => {
+      const phasePulse = isLockedDarkLab ? 12.0 + Math.sin(elapsedSec * 3.8 + idx * 1.5) * 5.0 : 0;
+      l.intensity = THREE.MathUtils.damp(l.intensity, phasePulse, 6, dt);
+    });
+
+    // No narrow dark-tunnel flashlight needed since the facility is clearly illuminated
+    this.headlamp.intensity = THREE.MathUtils.damp(this.headlamp.intensity, 0, 8, dt);
+
+    // Frequent eerie metallic groans & sparks bursting from dangling broken ceiling wires while trapped
     if (isLockedDarkLab && !this.paused) {
       this.ambientCreakTimer -= dt;
       if (this.ambientCreakTimer <= 0) {
-        this.ambientCreakTimer = 11.5 + Math.random() * 8.5;
+        this.ambientCreakTimer = 6.5 + Math.random() * 6.5;
         this.callbacks.onAmbientCreak?.();
+      }
+      this.horrorSparkTimer -= dt;
+      if (this.horrorSparkTimer <= 0) {
+        this.horrorSparkTimer = 4.2 + Math.random() * 4.8;
+        if (this.danglingFixtures.length > 0 && Math.random() > 0.35) {
+          const f = this.danglingFixtures[Math.floor(Math.random() * this.danglingFixtures.length)];
+          this.spawnSparkBurst(f.tipPos[0], f.tipPos[1], f.tipPos[2]);
+        } else {
+          const sparkAnchors: Array<[number, number, number]> = [
+            [-6.2, 3.4, -13.5],
+            [6.2, 3.4, -13.5],
+            [-10.5, 4.6, -9.8],
+            [10.5, 4.4, 0.6],
+            [0, 5.4, -19.2],
+          ];
+          const [sx, sy, sz] = sparkAnchors[Math.floor(Math.random() * sparkAnchors.length)];
+          this.spawnSparkBurst(sx, sy, sz);
+        }
       }
     }
 
@@ -2551,14 +2983,17 @@ export class LabSceneEngine {
       }
     }
 
-    // First-person movement
+    // First-person movement (Desktop Keyboard WASD/Arrows + Mobile Virtual Analog Joystick)
     if (!this.paused) {
-      const moveZ =
+      const kbZ =
         Number(!!(this.keys['KeyW'] || this.keys['ArrowUp'])) -
         Number(!!(this.keys['KeyS'] || this.keys['ArrowDown']));
-      const moveX =
+      const kbX =
         Number(!!(this.keys['KeyD'] || this.keys['ArrowRight'])) -
         Number(!!(this.keys['KeyA'] || this.keys['ArrowLeft']));
+
+      const moveZ = THREE.MathUtils.clamp(kbZ + this.virtualMoveZ, -1, 1);
+      const moveX = THREE.MathUtils.clamp(kbX + this.virtualMoveX, -1, 1);
 
       _forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       _right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -2566,9 +3001,10 @@ export class LabSceneEngine {
       _move.set(0, 0, 0);
       _move.addScaledVector(_forward, moveZ);
       _move.addScaledVector(_right, moveX);
-      if (_move.lengthSq() > 0.001) {
-        // Slightly brisker walk speed to enjoy the spacious lab & Modern World plaza
-        _move.normalize().multiplyScalar(isOutside ? 8.2 : 6.8);
+      const mag = Math.min(1, _move.length());
+      if (mag > 0.02) {
+        // Preserve smooth analog walk speed on mobile thumbstick and crisp max speed on keyboard
+        _move.normalize().multiplyScalar((isOutside ? 8.2 : 6.8) * mag);
       }
 
       this.playerVel.x = THREE.MathUtils.damp(this.playerVel.x, _move.x, 10, dt);
@@ -2671,14 +3107,8 @@ export class LabSceneEngine {
                     : this.placedKeys.size >= 5
                       ? 'All 5 Keys Placed · Press [E] to Open Main Gate!'
                       : `Keys Placed: ${this.placedKeys.size}/5 · Solve Vaults to Collect Keys`
-                  : bestNode.kind === 'experiment' && bestNode.experimentId
-                    ? this.resolvedExperiments.has(bestNode.experimentId)
-                      ? 'Containment Stabilized · Press [E] to Review Case File'
-                      : 'Failed Experiment · Press [E] to Audit Risk & Contain'
-                    : bestNode.sublabel,
+                : bestNode.sublabel,
           vaultId: bestNode.vaultId,
-          logId: bestNode.logId,
-          experimentId: bestNode.experimentId,
           locked:
             bestNode.kind === 'vault' && bestNode.vaultId
               ? bestNode.vaultId > highestUnlocked
@@ -2749,34 +3179,100 @@ export class LabSceneEngine {
       if (pod.mesh.position.x < -68) pod.mesh.position.x = 68;
     }
 
-    // Unsettling subtle twitch & rotation on suspended failed specimens inside containment pods
-    for (const [expId, pod] of this.experimentPods.entries()) {
-      const stabilized = this.resolvedExperiments.has(expId) || this.mainDoorOpen;
-      const twitch = !stabilized && Math.sin(elapsedSec * 9.5 + pod.phaseOffset) > 0.93 ? 0.12 : 0;
-      pod.specimen.rotation.y += dt * (stabilized ? 0.25 : 0.65);
-      pod.specimen.rotation.z = Math.sin(elapsedSec * 1.6 + pod.phaseOffset) * 0.14 + twitch;
-      pod.specimen.position.y = 2.08 + Math.sin(elapsedSec * 1.4 + pod.phaseOffset) * 0.08;
+    // Unsettling convulsive twitch + player-tracking eyes on mutated specimens inside containment tanks!
+    const lockedHorror = !this.mainDoorOpen && !this.facilityRestored;
+    for (const pod of this.experimentPods.values()) {
+      const stabilized = !lockedHorror;
+      const twitch = !stabilized && Math.sin(elapsedSec * 12.5 + pod.phaseOffset) > 0.86 ? 0.22 : 0;
+      pod.specimen.rotation.z = Math.sin(elapsedSec * 1.9 + pod.phaseOffset) * 0.14 + twitch;
+      pod.specimen.position.y = 2.12 + Math.sin(elapsedSec * 1.5 + pod.phaseOffset) * 0.09;
+
+      // Rotate specimen cranium to silently stare directly at the player as they move through the dark lab!
+      if (!stabilized) {
+        const dx = this.playerPos.x - pod.x;
+        const dz = this.playerPos.z - pod.z;
+        const worldYaw = Math.atan2(dx, dz);
+        const relYaw = worldYaw - pod.rotY;
+        pod.head.rotation.y = THREE.MathUtils.damp(pod.head.rotation.y, relYaw, 3.5, dt);
+        pod.head.rotation.z = twitch * 0.9;
+        pod.light.intensity = 9.0 + Math.sin(elapsedSec * 4.8 + pod.phaseOffset) * 3.2 + (twitch > 0 ? 5.5 : 0);
+      } else {
+        pod.head.rotation.y = THREE.MathUtils.damp(pod.head.rotation.y, 0, 2.5, dt);
+        pod.light.intensity = THREE.MathUtils.damp(pod.light.intensity, 2.5, 2.5, dt);
+      }
+    }
+
+    // Strobing blood-red breach lights on the 2 shattered empty pods
+    for (let i = 0; i < this.breachedPodLights.length; i++) {
+      const bl = this.breachedPodLights[i];
+      if (lockedHorror) {
+        const strobe = Math.sin(elapsedSec * 7.5 + i * 2.1) > 0.15 ? 11.5 : 1.2;
+        bl.intensity = strobe;
+      } else {
+        bl.intensity = THREE.MathUtils.damp(bl.intensity, 0, 3, dt);
+      }
+    }
+
+    // Gently swaying dangling broken ceiling light fixtures with sputtering dying tubes
+    for (const df of this.danglingFixtures) {
+      df.pivot.rotation.z = df.baseRotZ + Math.sin(elapsedSec * df.speed + df.phase) * 0.085;
+      df.pivot.rotation.x = Math.cos(elapsedSec * (df.speed * 0.72) + df.phase) * 0.05;
+      if (lockedHorror) {
+        const sparkOn = Math.sin(elapsedSec * 23.0 + df.phase * 4.0) > 0.84;
+        df.tubeMat.emissiveIntensity = sparkOn ? 1.8 : 0.08;
+      } else {
+        df.tubeMat.emissiveIntensity = 0.05;
+      }
+    }
+
+    // Eerie catwalk shadow stalkers: stare down during lockdown, periodically vanishing on dark flickers!
+    for (const st of this.catwalkStalkers) {
+      if (!lockedHorror || this.phase === 'cinematic') {
+        st.group.visible = false;
+      } else {
+        // Vanish occasionally in a creepy psychological flicker cycle so you wonder if you imagined them
+        const cycle = Math.sin(elapsedSec * 0.32 + st.phase);
+        st.group.visible = cycle > -0.25;
+        st.group.position.y = 6.32 + Math.sin(elapsedSec * 1.1 + st.phase) * 0.03;
+      }
     }
   }
 
   private updateFumes(dt: number, elapsedSec: number) {
-    // Fade out toxic rising vapor smoothly once ventilation restores with Main Door open
-    const targetOpacity = this.mainDoorOpen || this.facilityRestored ? 0.0 : 0.25;
+    // Fade out toxic rising vapor & low-lying horror ground mist smoothly once Main Door opens
+    const isClear = this.mainDoorOpen || this.facilityRestored;
+    const targetOpacity = isClear ? 0.0 : 0.34;
     this.fumeMat.opacity = THREE.MathUtils.damp(this.fumeMat.opacity, targetOpacity, 2.2, dt);
     this.fumePoints.visible = this.fumeMat.opacity > 0.01;
-    if (!this.fumePoints.visible) return;
 
-    const count = this.fumeSpeeds.length;
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      this.fumePositions[i3 + 1] += this.fumeSpeeds[i] * dt;
-      this.fumePositions[i3] = this.fumeOrigins[i3] + Math.sin(elapsedSec * 1.1 + i) * 0.28;
-      this.fumePositions[i3 + 2] = this.fumeOrigins[i3 + 2] + Math.cos(elapsedSec * 0.9 + i) * 0.28;
-      if (this.fumePositions[i3 + 1] > 2.85) {
-        this.fumePositions[i3 + 1] = 0.08;
+    const targetMistOpacity = isClear ? 0.0 : 0.16;
+    this.mistMat.opacity = THREE.MathUtils.damp(this.mistMat.opacity, targetMistOpacity, 2.0, dt);
+    this.mistPoints.visible = this.mistMat.opacity > 0.008;
+
+    if (this.fumePoints.visible) {
+      const count = this.fumeSpeeds.length;
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        this.fumePositions[i3 + 1] += this.fumeSpeeds[i] * dt;
+        this.fumePositions[i3] = this.fumeOrigins[i3] + Math.sin(elapsedSec * 1.0 + i) * 0.36;
+        this.fumePositions[i3 + 2] = this.fumeOrigins[i3 + 2] + Math.cos(elapsedSec * 0.85 + i) * 0.36;
+        if (this.fumePositions[i3 + 1] > 3.1) {
+          this.fumePositions[i3 + 1] = 0.15;
+        }
       }
+      (this.fumePoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
-    (this.fumePoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+
+    if (this.mistPoints.visible) {
+      const mistCount = this.mistPositions.length / 3;
+      for (let i = 0; i < mistCount; i++) {
+        const i3 = i * 3;
+        this.mistPositions[i3] = this.mistOrigins[i3] + Math.sin(elapsedSec * 0.28 + i * 0.7) * 1.45;
+        this.mistPositions[i3 + 1] = this.mistOrigins[i3 + 1] + Math.sin(elapsedSec * 0.45 + i) * 0.22;
+        this.mistPositions[i3 + 2] = this.mistOrigins[i3 + 2] + Math.cos(elapsedSec * 0.24 + i * 0.9) * 1.45;
+      }
+      (this.mistPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    }
   }
 
   private updateSparks(dt: number) {
@@ -2879,11 +3375,16 @@ export class LabSceneEngine {
     this.releasePointerLock();
 
     window.removeEventListener('resize', this.onResizeBound);
+    window.removeEventListener('orientationchange', this.onResizeBound);
     window.removeEventListener('keydown', this.onKeyDownBound);
     window.removeEventListener('keyup', this.onKeyUpBound);
     window.removeEventListener('mousemove', this.onMouseMoveBound);
     this.renderer.domElement.removeEventListener('mousedown', this.onMouseDownBound);
     window.removeEventListener('mouseup', this.onMouseUpBound);
+    this.renderer.domElement.removeEventListener('touchstart', this.onTouchStartBound);
+    this.renderer.domElement.removeEventListener('touchmove', this.onTouchMoveBound);
+    this.renderer.domElement.removeEventListener('touchend', this.onTouchEndBound);
+    this.renderer.domElement.removeEventListener('touchcancel', this.onTouchEndBound);
     document.removeEventListener('pointerlockchange', this.onPointerLockChangeBound);
     this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLostBound);
 

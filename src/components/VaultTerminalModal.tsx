@@ -348,17 +348,17 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-3 md:p-6">
-      <div className="max-w-4xl w-full max-h-[90vh] bg-[#080f1e] border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-2 sm:p-4 md:p-6">
+      <div className="max-w-4xl w-full max-h-[92dvh] bg-[#080f1e] border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 bg-[#0c1629] border-b border-slate-800 flex items-center justify-between gap-4 shrink-0">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono-data text-cyan-400">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-[#0c1629] border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] sm:text-xs font-mono-data text-cyan-400">
               <span>{vault.code}</span>
               <span aria-hidden="true">·</span>
               <span>{vault.difficulty}</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-slate-400">{vault.wing}</span>
+              <span className="hidden sm:inline" aria-hidden="true">·</span>
+              <span className="hidden sm:inline text-slate-400">{vault.wing}</span>
               {alreadyCompleted && (
                 <>
                   <span aria-hidden="true">·</span>
@@ -366,12 +366,12 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                 </>
               )}
             </div>
-            <h2 className="font-display text-2xl font-bold text-white mt-0.5">{vault.title}</h2>
+            <h2 className="font-display text-lg sm:text-2xl font-bold text-white mt-0.5 truncate">{vault.title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
             aria-label="Close vault terminal"
           >
             <X className="w-5 h-5" />
@@ -380,7 +380,7 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
 
         {/* Navigation Tabs */}
         {!vaultClearedNow && (
-          <div className="px-6 py-2.5 bg-[#091224] border-b border-slate-800 flex items-center justify-between gap-4 shrink-0">
+          <div className="px-3 sm:px-6 py-2 bg-[#091224] border-b border-slate-800 flex items-center justify-between gap-3 shrink-0 overflow-x-auto">
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -388,14 +388,14 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('concepts');
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
                   activeTab === 'concepts'
                     ? 'bg-cyan-400 text-slate-950'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Concept Guide ({vault.concepts.length})</span>
+                <span>Guide ({vault.concepts.length})</span>
               </button>
               <button
                 type="button"
@@ -403,7 +403,7 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('challenges');
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
                   activeTab === 'challenges'
                     ? 'bg-cyan-400 text-slate-950'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -420,7 +420,7 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('story');
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
                   activeTab === 'story'
                     ? 'bg-amber-400 text-slate-950'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -431,14 +431,14 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
               </button>
             </div>
 
-            <span className="hidden sm:inline text-xs font-mono-data text-slate-400">
+            <span className="hidden md:inline text-xs font-mono-data text-slate-400 whitespace-nowrap">
               Reward: {vault.keyName}
             </span>
           </div>
         )}
 
         {/* Main Scrollable Workspace */}
-        <div className="flex-1 overflow-y-auto terminal-scroll p-6">
+        <div className="flex-1 overflow-y-auto terminal-scroll p-4 sm:p-6">
           {vaultClearedNow ? (
             /* KEY COLLECTION CELEBRATION */
             <div className="max-w-xl mx-auto text-center py-6 space-y-6 animate-cinema-in">

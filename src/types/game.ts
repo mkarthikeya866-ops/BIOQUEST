@@ -118,34 +118,12 @@ export interface VaultDefinition {
   worldPosition: { x: number; z: number };
 }
 
-export interface ExperimentDilemma {
-  id: string;
-  podCode: string;
-  title: string;
-  riskCategory: 'OFF-TARGET TOXICITY' | 'ASSAY NOISE' | 'MUTATION ESCAPE' | 'TRIAL & FUNDING COLLAPSE';
-  smellCue: string;
-  statusTag: string;
-  briefing: string[];
-  telemetry: Array<{ label: string; value: string; tone?: 'red' | 'amber' | 'cyan' }>;
-  question: string;
-  choices: Array<{
-    id: string;
-    label: string;
-    detail: string;
-    isSafeScientific: boolean;
-    outcomeTitle: string;
-    outcomeText: string;
-  }>;
-}
-
 export interface InteractableTarget {
   id: string;
-  kind: 'vault' | 'log' | 'nexus' | 'exit' | 'monument' | 'experiment';
+  kind: 'vault' | 'nexus' | 'exit' | 'monument';
   label: string;
   sublabel: string;
   vaultId?: VaultId;
-  logId?: string;
-  experimentId?: string;
   locked?: boolean;
 }
 
@@ -155,8 +133,6 @@ export interface SavedProgress {
   placedKeys: VaultId[];
   mainDoorOpen: boolean;
   enteredModernWorld: boolean;
-  discoveredLogs: string[];
-  resolvedExperiments: string[];
   facilityRestored: boolean;
   introSeen: boolean;
 }

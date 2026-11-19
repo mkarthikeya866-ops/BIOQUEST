@@ -1,26 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LabSceneEngine } from './game/LabSceneEngine';
 import { soundEngine } from './audio/soundEngine';
-import { getExperimentById, getLogById, getVaultById, VAULTS } from './data/vaultData';
+import { getVaultById, VAULTS } from './data/vaultData';
 import {
   AudioSettings,
   CinematicSceneId,
-  ExperimentDilemma,
   GamePhase,
   InteractableTarget,
   NexusMessage,
   SavedProgress,
-  StoryLogEntry,
   VaultDefinition,
   VaultId,
 } from './types/game';
 import { CinematicOverlay } from './components/CinematicOverlay';
 import { GameplayHUD } from './components/GameplayHUD';
 import { VaultTerminalModal } from './components/VaultTerminalModal';
-import { IncidentLogModal } from './components/IncidentLogModal';
-import { ExperimentDilemmaModal } from './components/ExperimentDilemmaModal';
 import { MissionMapModal } from './components/MissionMapModal';
 import { CompletionRewardModal } from './components/CompletionRewardModal';
+import { MobileTouchControls } from './components/MobileTouchControls';
+
+function detectTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia?.('(pointer: coarse)').matches ||
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0
+  );
+}
 
 const STORAGE_KEY = 'bioquest_blackout_protocol_v1';
 
@@ -30,8 +36,6 @@ const DEFAULT_PROGRESS: SavedProgress = {
   placedKeys: [],
   mainDoorOpen: false,
   enteredModernWorld: false,
-  discoveredLogs: [],
-  resolvedExperiments: [],
   facilityRestored: false,
   introSeen: false,
 };
@@ -65,8 +69,6 @@ function loadSavedProgress(): SavedProgress {
       placedKeys: validPlaced,
       mainDoorOpen,
       enteredModernWorld: Boolean(parsed.enteredModernWorld) && mainDoorOpen,
-      discoveredLogs: Array.isArray(parsed.discoveredLogs) ? parsed.discoveredLogs : [],
-      resolvedExperiments: Array.isArray(parsed.resolvedExperiments) ? parsed.resolvedExperiments : [],
       facilityRestored: Boolean(parsed.facilityRestored) || mainDoorOpen,
       introSeen: Boolean(parsed.introSeen),
     };
@@ -89,11 +91,10 @@ export default function App() {
 
   // Gameplay HUD & Modals
   const [pointerLocked, setPointerLocked] = useState(false);
+  const [touchControlsEnabled, setTouchControlsEnabled] = useState<boolean>(() => detectTouchDevice());
   const [hoverTarget, setHoverTarget] = useState<InteractableTarget | null>(null);
   const [playerMapPos, setPlayerMapPos] = useState({ x: 0, z: 14.5 });
   const [activeVault, setActiveVault] = useState<VaultDefinition | null>(null);
-  const [activeLog, setActiveLog] = useState<StoryLogEntry | null>(null);
-  const [activeExperiment, setActiveExperiment] = useState<ExperimentDilemma | null>(null);
   const [fumeStatus, setFumeStatus] = useState<{ ppm: number; smellCue: string | null }>({
     ppm: 0,
     smellCue: null,
@@ -123,8 +124,7 @@ export default function App() {
       progress.completedVaults,
       progress.placedKeys,
       progress.mainDoorOpen,
-      progress.facilityRestored,
-      progress.resolvedExperiments
+      progress.facilityRestored
     );
   }, [progress]);
 
@@ -170,16 +170,6 @@ export default function App() {
         soundEngine.playTerminalOpen();
         setActiveVault(vault);
         announceNexus(vault.nexusIntro, 'info', 9000);
-      } else if (target.kind === 'log' && target.logId) {
-        const log = getLogById(target.logId);
-        if (!log) return;
-        soundEngine.playTerminalOpen();
-        setActiveLog(log);
-        setProgress((prev) =>
-          prev.discoveredLogs.includes(log.id)
-            ? prev
-            : { ...prev, discoveredLogs: [...prev.discoveredLogs, log.id] }
-        );
       } else if (target.kind === 'nexus') {
         soundEngine.playHologramActivate();
         const unplaced = curr.completedVaults.filter((k) => !curr.placedKeys.includes(k));
@@ -275,11 +265,6 @@ export default function App() {
       } else if (target.kind === 'monument') {
         soundEngine.playTerminalOpen();
         setShowReward(true);
-      } else if (target.kind === 'experiment' && target.experimentId) {
-        const exp = getExperimentById(target.experimentId);
-        if (!exp) return;
-        soundEngine.playTerminalOpen();
-        setActiveExperiment(exp);
       }
     },
     [announceNexus]
@@ -401,7 +386,7 @@ export default function App() {
     };
   }, [handleCinematicTime]);
 
-  const anyModalOpen = Boolean(activeVault || activeLog || activeExperiment || showMap || showReward);
+  const anyModalOpen = Boolean(activeVault || showMap || showReward);
   useEffect(() => {
     if (phase === 'gameplay') {
       engineRef.current?.setPaused(anyModalOpen);
@@ -412,7 +397,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (phaseRef.current !== 'gameplay') return;
-      if (activeVault || activeLog || activeExperiment || showReward) return;
+      if (activeVault || showReward) return;
 
       if (e.code === 'KeyM') {
         e.preventDefault();
@@ -442,7 +427,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeVault, activeLog, activeExperiment, showReward, announceNexus]);
+  }, [activeVault, showReward, announceNexus]);
 
   const handleStartIntroWithAudio = async () => {
     await soundEngine.unlock();
@@ -471,8 +456,6 @@ export default function App() {
     soundEngine.stopEmergencyAlarm();
     soundEngine.stopSpeech();
     setActiveVault(null);
-    setActiveLog(null);
-    setActiveExperiment(null);
     setShowMap(false);
     setShowReward(false);
     setNexusMessage(null);
@@ -500,8 +483,7 @@ export default function App() {
         curr.completedVaults,
         curr.placedKeys,
         curr.mainDoorOpen,
-        curr.facilityRestored,
-        curr.resolvedExperiments
+        curr.facilityRestored
       );
       soundEngine.setAmbience(curr.mainDoorOpen || curr.facilityRestored ? 'victory' : 'gameplay-thriller');
 
@@ -567,9 +549,7 @@ export default function App() {
     setProgress({ ...DEFAULT_PROGRESS, introSeen: true });
     setShowReward(false);
     setActiveVault(null);
-    setActiveLog(null);
-    setActiveExperiment(null);
-    engineRef.current?.syncProgress([], [], false, false, []);
+    engineRef.current?.syncProgress([], [], false, false);
   };
 
   const handleNavigateToVault = (vaultId: VaultId) => {
@@ -598,26 +578,10 @@ export default function App() {
     }
   };
 
-  const handleNavigateToExperiment = (experimentId: string) => {
-    soundEngine.playDoorSlide();
-    setShowMap(false);
-    engineRef.current?.teleportNearExperiment(experimentId);
-    const exp = getExperimentById(experimentId);
-    if (exp) {
-      announceNexus(
-        `Approaching containment breach ${exp.podCode} (${exp.title}). Watch the vapor sensor and press E to audit the failed experiment.`,
-        'warning',
-        6500
-      );
-    }
-  };
-
   const handleReturnToTitle = () => {
     soundEngine.playButtonClick();
     soundEngine.stopSpeech();
     setActiveVault(null);
-    setActiveLog(null);
-    setActiveExperiment(null);
     setShowMap(false);
     setShowReward(false);
     setNexusMessage(null);
@@ -626,9 +590,9 @@ export default function App() {
   };
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#060911]">
+    <main className="relative w-screen h-[100dvh] overflow-hidden bg-[#060911]">
       {/* Isolated stable WebGL 3D Viewport Container */}
-      <div ref={canvasMountRef} className="fixed inset-0 w-full h-full z-0" />
+      <div ref={canvasMountRef} className="fixed inset-0 w-full h-full z-0 touch-none" />
 
       {/* Smooth Cinematic-to-Gameplay Fade Curtain */}
       <div
@@ -660,11 +624,11 @@ export default function App() {
         <GameplayHUD
           completedVaults={progress.completedVaults}
           placedKeys={progress.placedKeys}
-          resolvedExperimentsCount={progress.resolvedExperiments.length}
           mainDoorOpen={progress.mainDoorOpen}
           isInModernWorld={isInModernWorld}
           fumeStatus={fumeStatus}
           pointerLocked={pointerLocked}
+          touchControlsEnabled={touchControlsEnabled}
           modalOpen={anyModalOpen}
           hoverTarget={hoverTarget}
           nexusMessage={nexusMessage}
@@ -672,6 +636,18 @@ export default function App() {
           onResumePointerLock={() => {
             soundEngine.unlock();
             engineRef.current?.requestPointerLock();
+          }}
+          onToggleTouchControls={() => {
+            soundEngine.playButtonClick();
+            setTouchControlsEnabled((prev) => {
+              const next = !prev;
+              if (!next) {
+                engineRef.current?.setVirtualMove(0, 0);
+              } else {
+                engineRef.current?.releasePointerLock();
+              }
+              return next;
+            });
           }}
           onOpenMap={() => {
             soundEngine.playButtonClick();
@@ -710,12 +686,24 @@ export default function App() {
         />
       )}
 
+      {/* Mobile & Tablet Virtual Analog Joystick + Contextual Interact Thumb Pad */}
+      {phase === 'gameplay' && touchControlsEnabled && !anyModalOpen && (
+        <MobileTouchControls
+          hoverTarget={hoverTarget}
+          onMoveVector={(x, z) => {
+            engineRef.current?.setVirtualMove(x, z);
+          }}
+          onInteract={() => {
+            if (hoverTarget) handleInteract(hoverTarget);
+          }}
+        />
+      )}
+
       {/* Five-Vault Mission Map Modal */}
       {phase === 'gameplay' && showMap && (
         <MissionMapModal
           completedVaults={progress.completedVaults}
           placedKeys={progress.placedKeys}
-          resolvedExperiments={progress.resolvedExperiments}
           mainDoorOpen={progress.mainDoorOpen}
           playerPos={playerMapPos}
           onClose={() => {
@@ -724,7 +712,6 @@ export default function App() {
           }}
           onNavigateToVault={handleNavigateToVault}
           onNavigateToMainDoor={handleNavigateToMainDoor}
-          onNavigateToExperiment={handleNavigateToExperiment}
         />
       )}
 
@@ -741,36 +728,6 @@ export default function App() {
             if (progressRef.current.completedVaults.includes(activeVault.id)) {
               engineRef.current?.triggerLabFireworks(2);
             }
-          }}
-        />
-      )}
-
-      {/* Inspectable Atrium Story Log Terminal Modal */}
-      {phase === 'gameplay' && activeLog && (
-        <IncidentLogModal
-          log={activeLog}
-          onClose={() => {
-            soundEngine.playButtonClick();
-            setActiveLog(null);
-          }}
-        />
-      )}
-
-      {/* High-Stakes Failed Experiment Risk Audit & Containment Modal */}
-      {phase === 'gameplay' && activeExperiment && (
-        <ExperimentDilemmaModal
-          experiment={activeExperiment}
-          alreadyResolved={progress.resolvedExperiments.includes(activeExperiment.id)}
-          onResolve={(expId) => {
-            setProgress((prev) =>
-              prev.resolvedExperiments.includes(expId)
-                ? prev
-                : { ...prev, resolvedExperiments: [...prev.resolvedExperiments, expId] }
-            );
-          }}
-          onClose={() => {
-            soundEngine.playButtonClick();
-            setActiveExperiment(null);
           }}
         />
       )}

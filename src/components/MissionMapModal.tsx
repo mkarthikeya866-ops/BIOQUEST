@@ -1,30 +1,26 @@
 import React from 'react';
-import { X, Lock, CheckCircle2, KeyRound, Navigation, DoorOpen, Biohazard } from 'lucide-react';
-import { FAILED_EXPERIMENTS, VAULTS } from '../data/vaultData';
+import { X, Lock, CheckCircle2, KeyRound, Navigation, DoorOpen } from 'lucide-react';
+import { VAULTS } from '../data/vaultData';
 import { VaultId } from '../types/game';
 
 interface MissionMapModalProps {
   completedVaults: VaultId[];
   placedKeys: VaultId[];
-  resolvedExperiments: string[];
   mainDoorOpen: boolean;
   playerPos: { x: number; z: number };
   onClose: () => void;
   onNavigateToVault: (vaultId: VaultId) => void;
   onNavigateToMainDoor: () => void;
-  onNavigateToExperiment: (experimentId: string) => void;
 }
 
 export const MissionMapModal: React.FC<MissionMapModalProps> = ({
   completedVaults,
   placedKeys,
-  resolvedExperiments,
   mainDoorOpen,
   playerPos,
   onClose,
   onNavigateToVault,
   onNavigateToMainDoor,
-  onNavigateToExperiment,
 }) => {
   const highestUnlocked = Math.min(5, completedVaults.length + 1) as VaultId;
 
@@ -34,34 +30,34 @@ export const MissionMapModal: React.FC<MissionMapModalProps> = ({
   const playerPctY = Math.max(6, Math.min(92, ((clampedZ + 28) / 49) * 100));
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
-      <div className="max-w-4xl w-full bg-[#091120] border border-slate-700 rounded-lg overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0c1629]">
-          <div>
-            <p className="text-xs font-mono-data text-cyan-400">
-              FIVE-VAULT MISSION MAP · {completedVaults.length}/5 KEYS COLLECTED · {placedKeys.length}/5 PLACED IN MAIN DOOR
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-2.5 sm:p-4">
+      <div className="max-w-4xl w-full max-h-[92dvh] bg-[#091120] border border-slate-700 rounded-lg overflow-hidden shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-[#0c1629] shrink-0 gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] sm:text-xs font-mono-data text-cyan-400 truncate">
+              FIVE-VAULT MAP · {completedVaults.length}/5 COLLECTED · {placedKeys.length}/5 IN DOOR
             </p>
-            <h2 className="font-display text-xl font-bold text-white mt-0.5">
-              Grand BioQuest Research Facility &amp; Modern World Gate
+            <h2 className="font-display text-lg sm:text-xl font-bold text-white mt-0.5 truncate">
+              Grand BioQuest Facility &amp; Main Gate
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
             aria-label="Close mission map"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 p-4 sm:p-6 overflow-y-auto terminal-scroll flex-1">
           {/* Left 7 cols: Spatial Floorplan Schematic */}
-          <div className="md:col-span-7 bg-[#060b16] border border-slate-800 rounded-lg p-4 relative min-h-[380px]">
+          <div className="md:col-span-7 bg-[#060b16] border border-slate-800 rounded-lg p-3 sm:p-4 relative min-h-[300px] sm:min-h-[380px]">
             {/* Modern World Zone strip at top */}
-            <div className="absolute top-2 left-4 right-4 h-12 rounded border border-sky-500/35 bg-sky-950/35 flex items-center justify-center text-xs font-mono-data text-sky-300">
+            <div className="absolute top-2 left-3 right-3 sm:left-4 sm:right-4 h-10 sm:h-12 rounded border border-sky-500/35 bg-sky-950/35 flex items-center justify-center text-[10px] sm:text-xs font-mono-data text-sky-300 text-center px-2">
               {mainDoorOpen
-                ? 'MODERNIZED WORLD PLAZA — GATE OPEN (WALK NORTH)'
+                ? 'MODERNIZED WORLD PLAZA — GATE OPEN'
                 : 'MODERNIZED WORLD BEYOND MAIN DOOR (LOCKED)'}
             </div>
 
@@ -126,36 +122,6 @@ export const MissionMapModal: React.FC<MissionMapModalProps> = ({
               );
             })}
 
-            {/* Failed Experiment Containment Pods (Chemical Leak Biohazard Zones) */}
-            {FAILED_EXPERIMENTS.map((exp) => {
-              const resolved = resolvedExperiments.includes(exp.id);
-              const podCoords: Record<string, { left: string; top: string }> = {
-                'exp-herg-toxicity': { left: '24%', top: '60%' },
-                'exp-assay-noise': { left: '76%', top: '60%' },
-                'exp-mutation-escape': { left: '28%', top: '36%' },
-                'exp-trial-collapse': { left: '73%', top: '35%' },
-              };
-              const pos = podCoords[exp.id];
-              if (!pos) return null;
-              return (
-                <button
-                  key={exp.id}
-                  type="button"
-                  onClick={() => onNavigateToExperiment(exp.id)}
-                  style={{ left: pos.left, top: pos.top }}
-                  title={`${exp.podCode} — ${exp.title}`}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 px-2 py-1 rounded border text-[10px] font-mono-data flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
-                    resolved
-                      ? 'bg-emerald-950/85 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
-                      : 'bg-[#1a1f0b]/95 border-lime-500/70 text-lime-300 hover:bg-lime-950'
-                  }`}
-                >
-                  <Biohazard className="w-3 h-3 shrink-0" />
-                  <span>{exp.podCode.replace('POD ', '')}</span>
-                </button>
-              );
-            })}
-
             {/* Live Player Position Marker */}
             <div
               className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
@@ -168,8 +134,8 @@ export const MissionMapModal: React.FC<MissionMapModalProps> = ({
             </div>
 
             <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-[11px] font-mono-data text-slate-400">
-              <span>Grand Lab (44m × 42m) · {resolvedExperiments.length}/4 Leak Audits</span>
-              <span>Click Vault, Pod, or Door to go</span>
+              <span>Grand Lab Atrium (44m × 42m) · Year 2045</span>
+              <span>Click Vault or Main Door to navigate</span>
             </div>
           </div>
 

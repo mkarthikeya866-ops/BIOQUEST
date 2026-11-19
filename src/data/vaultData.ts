@@ -1,52 +1,4 @@
-import { ExperimentDilemma, StoryLogEntry, VaultDefinition } from '../types/game';
-
-export const ATRIUM_INCIDENT_LOGS: StoryLogEntry[] = [
-  {
-    id: 'log-cam-04',
-    code: 'CAM-04 // ATRIUM CORRIDOR',
-    title: 'Security Camera Recording #04',
-    timestamp: '2024-12-14 · 23:47:19',
-    source: 'West Wing Optical Sensor',
-    classification: 'SECURITY CAM',
-    body: [
-      'Frame analysis confirms zero physical personnel entered the main research floor after 22:15.',
-      'At 23:47:19, Workstation B-07 illuminated autonomously. Remote session token "EXT-SYNC-09" initiated a high-priority query against the Bioactivity Archive.',
-      'Seconds later, power draw on Server Rack C spiked to 142% rated load before the cooling interlock tripped.',
-    ],
-    nexusNote:
-      'No intruder walked through the doors. The breach originated from an unauthorized remote pipeline job.',
-  },
-  {
-    id: 'log-server-err',
-    code: 'SYS-DUMP // PIPELINE-409',
-    title: 'Corrupted Batch Export Record',
-    timestamp: '2024-12-14 · 23:48:04',
-    source: 'Automated Screening Queue',
-    classification: 'CORRUPTED FILE',
-    body: [
-      'JOB_ID: EXPORT_BQ409_FASTTRACK [STATUS: ABORTED BY SAFEGUARD]',
-      'WARNING: Incoming SMILES parser encountered malformed syntax strings in batch rows 14–19.',
-      'ALERT: External script attempted to overwrite Lipinski descriptor flags and publish an unverified XGBoost prediction directly to the client portal.',
-    ],
-    nexusNote:
-      'Someone tried to push a flawed compound report past our validation vaults. Recover all five keys to inspect the full audit trail.',
-  },
-  {
-    id: 'log-dr-vance',
-    code: 'LAB-NOTE // DR. E. VANCE',
-    title: 'Lead Scientist Shift Memo',
-    timestamp: '2024-12-14 · 21:30:00',
-    source: 'Principal Investigator Terminal',
-    classification: 'RESEARCH LOG',
-    body: [
-      'Note to morning shift: Do NOT release compound BQ-409 from the screening archive. Its measured IC50 was never reproduced in a comparable assay, and its molecular weight exceeds oral drug-likeness guidelines.',
-      'I have enabled NEXUS Integrity Safeguard Level 5 across all five research vaults until the audit finishes.',
-      'Candidate BQ-714 remains our legitimate lead for further wet-lab validation only—never let marketing describe a model score as a proven drug.',
-    ],
-    nexusNote:
-      'Dr. Vance locked down the protocol before leaving. Investigating all five vaults will let us restore the facility safely.',
-  },
-];
+import { VaultDefinition } from '../types/game';
 
 export const VAULTS: VaultDefinition[] = [
   // =========================================================================
@@ -70,7 +22,7 @@ export const VAULTS: VaultDefinition[] = [
       id: 'vault-01-log',
       code: 'ARCHIVE-AUDIT-01',
       title: 'Suspicious Assay Override Detected',
-      timestamp: '2024-12-14 · 23:47:31',
+      timestamp: '2045-12-14 · 23:47:31',
       source: 'Bioactivity Archive Server',
       classification: 'INCIDENT RECORD',
       body: [
@@ -258,7 +210,7 @@ export const VAULTS: VaultDefinition[] = [
       id: 'vault-02-log',
       code: 'PARSER-TRACE-02',
       title: 'Malformed SMILES Injection Identified',
-      timestamp: '2024-12-14 · 23:47:48',
+      timestamp: '2045-12-14 · 23:47:48',
       source: 'Molecular Structure Parser',
       classification: 'CORRUPTED FILE',
       body: [
@@ -427,7 +379,7 @@ export const VAULTS: VaultDefinition[] = [
       id: 'vault-03-log',
       code: 'DETECTIVE-FILE-03',
       title: 'BQ-409 Property Flags Suppressed',
-      timestamp: '2024-12-14 · 23:47:56',
+      timestamp: '2045-12-14 · 23:47:56',
       source: 'Descriptor Profiler Engine',
       classification: 'RESEARCH LOG',
       body: [
@@ -605,7 +557,7 @@ export const VAULTS: VaultDefinition[] = [
       id: 'vault-04-log',
       code: 'ML-AUDIT-04',
       title: 'Unauthorized Claim Escalation Caught',
-      timestamp: '2024-12-14 · 23:48:02',
+      timestamp: '2045-12-14 · 23:48:02',
       source: 'XGBoost Inference Cluster',
       classification: 'INCIDENT RECORD',
       body: [
@@ -774,7 +726,7 @@ export const VAULTS: VaultDefinition[] = [
       id: 'vault-05-log',
       code: 'BLACKOUT-ROOT-CAUSE-05',
       title: 'Incident Resolution — Why the Blackout Happened',
-      timestamp: '2024-12-14 · 23:48:06',
+      timestamp: '2045-12-14 · 23:48:06',
       source: 'NEXUS Core Integrity Vault',
       classification: 'INCIDENT RECORD',
       body: [
@@ -944,176 +896,8 @@ export const VAULTS: VaultDefinition[] = [
   },
 ];
 
-export const FAILED_EXPERIMENTS: ExperimentDilemma[] = [
-  {
-    id: 'exp-herg-toxicity',
-    podCode: 'POD-X09 // CARDIOTOXICITY',
-    title: 'Failed Specimen X-09 — Off-Target hERG Blockade',
-    riskCategory: 'OFF-TARGET TOXICITY',
-    smellCue: 'Sharp metallic ozone & leaking cryo-preservative solvent',
-    statusTag: 'CRACKED SEAL · FUME LEAK',
-    briefing: [
-      'A trembling palm print is smeared across the inside of the glass inspection hatch. Inside, amber lipid precipitate coats a dead cardiomyocyte organoid.',
-      'Candidate X-09 looked like a miracle on paper: nanomolar potency on EGFR (IC50 = 12 nM). Yet its basic amine + greasy diaryl tail simultaneously jammed the human cardiac hERG potassium channel (hERG IC50 = 38 nM)—triggering lethal QT prolongation in preclinical telemetry.',
-    ],
-    telemetry: [
-      { label: 'On-Target EGFR IC50', value: '12 nM (Deceptively Potent)', tone: 'cyan' },
-      { label: 'Off-Target hERG IC50', value: '38 nM (Selectivity Ratio 3.1x)', tone: 'red' },
-      { label: 'Cardiotoxicity Verdict', value: 'CRITICAL ARRHYTHMIA HAZARD', tone: 'red' },
-    ],
-    question:
-      'The investor board demands a lead candidate before Friday’s funding freeze. Do you advance X-09 to first-in-human dosing or quarantine and redesign the scaffold?',
-    choices: [
-      {
-        id: 'quarantine-redesign',
-        label: 'Quarantine X-09 & Redesign to Reduce Basicity / Lipophilicity',
-        detail: 'Halt advancement; demand > 30–100x hERG safety margin before dosing',
-        isSafeScientific: true,
-        outcomeTitle: 'CONTAINMENT STABILIZED — PATIENT SAFETY PROTECTED',
-        outcomeText:
-          'Correct medicinal chemistry decision. A 3.1x hERG margin is a fatal clinical trap. Lowering LogP and attenuating the basic amine pKa can dial out hERG liability before ever risking human lives.',
-      },
-      {
-        id: 'rush-human-trial',
-        label: 'Override Safety Flag — Advance X-09 on Potency Alone',
-        detail: 'Highlight the 12 nM EGFR headline to keep quarterly funding alive',
-        isSafeScientific: false,
-        outcomeTitle: 'DREAD ESCALATION — CATASTROPHIC CLINICAL FAILURE',
-        outcomeText:
-          'Unacceptable risk. Advancing a potent hERG blocker into humans risks sudden cardiac death (Torsades de Pointes) and guaranteed regulatory termination. Potency without selectivity is poison, not medicine.',
-      },
-    ],
-  },
-  {
-    id: 'exp-assay-noise',
-    podCode: 'POD-A14 // ASSAY NOISE',
-    title: 'Failed Batch A-14 — PAINS Colloidal Aggregator',
-    riskCategory: 'ASSAY NOISE',
-    smellCue: 'Bitter DMSO solvent & acrid precipitated reagent mist',
-    statusTag: 'LEAKING MANIFOLD · REPLICATE DRIFT',
-    briefing: [
-      'Yellowish reagent drips from the ruptured microplate carousel onto the floor. Replicate curves on the cracked screen scatter wildly (CV = 68%) with an abnormally steep Hill slope of 3.4.',
-      'Someone hid the detergent-sensitivity control: when 0.01% Triton X-100 was added, all "inhibition" vanished completely. The compound was forming microscopic chemical micelles that non-specifically smothered the enzyme.',
-    ],
-    telemetry: [
-      { label: 'Apparent COX-2 IC50 (No Detergent)', value: '180 nM (False Hit)', tone: 'amber' },
-      { label: 'With 0.01% Triton X-100', value: '> 50,000 nM (Total Collapse)', tone: 'red' },
-      { label: 'Replicate Noise / Hill Slope', value: 'CV 68%  |  Hill Slope 3.4', tone: 'red' },
-    ],
-    question:
-      'Your screening dashboard still tags A-14 as an "Active Hit" for the XGBoost training set. What is your call?',
-    choices: [
-      {
-        id: 'flag-pains-purge',
-        label: 'Purge A-14 as a Colloidal Aggregator Artifact & Retest Orthogonal Assay',
-        detail: 'Prevent assay noise from poisoning both chemistry and ML training labels',
-        isSafeScientific: true,
-        outcomeTitle: 'ASSAY INTEGRITY RESTORED — FALSE POSITIVE PURGED',
-        outcomeText:
-          'Sharp catch. Colloidal aggregators and PAINS (Pan-Assay Interference Compounds) waste millions and poison machine learning datasets with false "Active" labels. Counter-screening with detergent saves months of doomed synthesis.',
-      },
-      {
-        id: 'keep-training-label',
-        label: 'Keep the 180 nM Reading in the ML Training Database',
-        detail: 'More "Active" labels make the pitch deck look richer',
-        isSafeScientific: false,
-        outcomeTitle: 'PIPELINE CORRUPTION — MODEL POISONED BY NOISE',
-        outcomeText:
-          'Disaster. Feeding noisy aggregation artifacts into XGBoost teaches the AI to hunt for sticky, useless false positives—trapping the entire lab in a loop of dead-end chemistry.',
-      },
-    ],
-  },
-  {
-    id: 'exp-mutation-escape',
-    podCode: 'POD-V14 // MUTATION DRIFT',
-    title: 'Failed Culture V-14 — T790M Resistance Mutation',
-    riskCategory: 'MUTATION ESCAPE',
-    smellCue: 'Sickly sweet bio-broth & ruptured sterilant chlorine fumes',
-    statusTag: 'PRESSURE WARNING · BIO-GROWTH',
-    briefing: [
-      'Scratched warning notes cling to the fogged cylinder: "IT ADAPTED IN 72 HOURS." Inside the sickly green nutrient suspension, dense mutated cell colonies thrive directly inside a lethal concentration of first-generation inhibitor.',
-      'Sequencing revealed a single-point gatekeeper mutation (EGFR T790M) that sterically blocks the drug from entering the ATP pocket—a classic nightmare shared by both oncology targets and fast-mutating pathogens.',
-    ],
-    telemetry: [
-      { label: 'Wild-Type Target IC50', value: '24 nM (Initially Sensitive)', tone: 'cyan' },
-      { label: 'Mutant T790M Strain IC50', value: '9,400 nM (390x Loss of Potency)', tone: 'red' },
-      { label: 'Containment Bio-Pressure', value: 'RISING · MUTANT DOMINANCE', tone: 'amber' },
-    ],
-    question:
-      'The first-generation inhibitor has collapsed against the mutant strain. How do you respond?',
-    choices: [
-      {
-        id: 'design-mutant-selective',
-        label: 'Seal Tank & Pivot to Next-Gen Mutant-Selective Binding Strategy',
-        detail: 'Screen against the T790M mutant assay directly & monitor resistance pathways',
-        isSafeScientific: true,
-        outcomeTitle: 'CONTAINMENT SEALED — RESISTANCE COUNTER-STRATEGY LOGGED',
-        outcomeText:
-          'Scientifically sound. Pathogens and tumor kinases evolve relentlessly under drug pressure. Real drug discovery anticipates resistance mutations early by testing mutant panels alongside wild-type targets.',
-      },
-      {
-        id: 'megadose-old-drug',
-        label: 'Simply Escalate Dose 400x to Force the Old Drug Through',
-        detail: 'Ignore toxicity ceilings and flood the system',
-        isSafeScientific: false,
-        outcomeTitle: 'TOXIC OVERDOSE — THERAPEUTIC WINDOW DESTROYED',
-        outcomeText:
-          'Fatal error. Multiplying a dose 400-fold obliterates the therapeutic window, triggering severe systemic organ toxicity long before achieving effective inhibition of the resistant mutant.',
-      },
-    ],
-  },
-  {
-    id: 'exp-trial-collapse',
-    podCode: 'POD-B09 // PHASE II POST-MORTEM',
-    title: 'Archived Collapse BQ-409 — Funding & Trial Failure',
-    riskCategory: 'TRIAL & FUNDING COLLAPSE',
-    smellCue: 'Burnt server insulation & sour degraded organic solvent',
-    statusTag: 'LOCKED AUDIT · $340M LOSS',
-    briefing: [
-      'Smudged fingerprints cover the emergency purge keypad. A shredded Phase II readout floats inside the depressurized sample vault: "PRIMARY ENDPOINT MISSED — HEPATOTOXICITY SIGNAL IN COHORT B."',
-      'Fourteen months ago, executives ignored early reactive-metabolite alerts and high LogP (6.8) to chase a $340M milestone. When the trial collapsed, Series C funding evaporated overnight—driving someone to deploy the rogue EXT-SYNC-09 script tonight.',
-    ],
-    telemetry: [
-      { label: 'Trial Stage Collapse', value: 'Phase II Terminated (Liver Toxicity)', tone: 'red' },
-      { label: 'Cash Runway Remaining', value: '19 Days Before Facility Foreclosure', tone: 'amber' },
-      { label: 'Root Chemical Flaw', value: 'LogP 6.8 · Unchecked Reactive Metabolite', tone: 'red' },
-    ],
-    question:
-      'An anonymous executive message flashes on the terminal: "Hide the metabolite appendix and publish the optimistic AI score so the bridge loan clears." Your decision?',
-    choices: [
-      {
-        id: 'refuse-preserve-truth',
-        label: 'Lock the Honest Failure Record & Enforce Transparent Go/No-Go Criteria',
-        detail: 'Kill flawed candidates early ("fail fast, fail cheap") rather than in patients',
-        isSafeScientific: true,
-        outcomeTitle: 'ETHICAL PROTOCOL UPHELD — REAL SCIENCE PRESERVED',
-        outcomeText:
-          'The hardest lesson in medicinal chemistry: killing a bad molecule early hurts the quarterly budget, but hiding toxicity destroys patients, careers, and entire institutions. Transparent data is the only path to real medicine.',
-      },
-      {
-        id: 'bury-metabolite-report',
-        label: 'Suppress the Liver Toxicity Appendix to Secure Emergency Funding',
-        detail: 'Sign off on the altered summary and hope Phase III gets lucky',
-        isSafeScientific: false,
-        outcomeTitle: 'CATASTROPHIC BREACH — SAFEGUARD ALARM TRIGGERED',
-        outcomeText:
-          'This exact shortcut caused the Blackout Protocol. Hiding preclinical toxicity guarantees clinical harm, criminal liability, and permanent collapse of scientific trust.',
-      },
-    ],
-  },
-];
-
 export function getVaultById(id: number): VaultDefinition | undefined {
   return VAULTS.find((v) => v.id === id);
 }
 
-export function getLogById(id: string): StoryLogEntry | undefined {
-  const atrium = ATRIUM_INCIDENT_LOGS.find((l) => l.id === id);
-  if (atrium) return atrium;
-  return VAULTS.find((v) => v.storyLog.id === id)?.storyLog;
-}
-
-export function getExperimentById(id: string): ExperimentDilemma | undefined {
-  return FAILED_EXPERIMENTS.find((e) => e.id === id);
-}
 

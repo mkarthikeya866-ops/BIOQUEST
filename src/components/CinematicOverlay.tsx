@@ -52,29 +52,29 @@ export const CinematicOverlay: React.FC<CinematicOverlayProps> = ({
       {/* Subtle letterbox bars strictly during cinematic playback */}
       {phase === 'cinematic' && (
         <>
-          <div className="h-12 bg-[#03060c] border-b border-slate-800/80 flex items-center justify-between px-6 pointer-events-auto">
-            <div className="flex items-center gap-3 text-xs font-mono-data text-slate-400">
-              <span className="text-cyan-400 font-semibold tracking-wider">BIOQUEST ARCHIVE FEED</span>
-              <span aria-hidden="true">·</span>
-              <span>{SCENE_LABELS[sceneId]}</span>
+          <div className="h-12 bg-[#03060c] border-b border-slate-800/80 flex items-center justify-between px-3 sm:px-6 pointer-events-auto gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono-data text-slate-400 min-w-0">
+              <span className="text-cyan-400 font-semibold tracking-wider truncate">BIOQUEST FEED</span>
+              <span className="hidden sm:inline" aria-hidden="true">·</span>
+              <span className="hidden sm:inline truncate">{SCENE_LABELS[sceneId]}</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <button
                 type="button"
                 onClick={onToggleMute}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700 hover:border-cyan-500/60 hover:text-cyan-300 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700 hover:border-cyan-500/60 hover:text-cyan-300 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 aria-label={audioSettings.muted ? 'Unmute audio' : 'Mute audio'}
               >
                 {audioSettings.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                <span>{audioSettings.muted ? 'Unmute' : 'Mute'}</span>
+                <span className="hidden sm:inline">{audioSettings.muted ? 'Unmute' : 'Mute'}</span>
               </button>
               <button
                 type="button"
                 onClick={onSkipIntro}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cyan-200 bg-cyan-950/80 border border-cyan-500/40 hover:bg-cyan-900/80 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-cyan-200 bg-cyan-950/80 border border-cyan-500/40 hover:bg-cyan-900/80 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <FastForward className="w-3.5 h-3.5" />
-                <span>Skip Intro</span>
+                <span>Skip</span>
               </button>
             </div>
           </div>
@@ -82,7 +82,7 @@ export const CinematicOverlay: React.FC<CinematicOverlayProps> = ({
       )}
 
       {/* Center Stage Overlays */}
-      <div className="flex-1 relative flex items-center justify-center px-6">
+      <div className="flex-1 relative flex items-center justify-center px-3 sm:px-6 overflow-y-auto py-4">
         {/* Autoplay blocked fallback prompt */}
         {phase === 'cinematic' && needsAutoplayTap && (
           <div className="pointer-events-auto max-w-md w-full bg-[#080e1c]/95 border border-cyan-500/40 rounded-lg p-7 text-center shadow-2xl animate-cinema-in">
@@ -118,15 +118,15 @@ export const CinematicOverlay: React.FC<CinematicOverlayProps> = ({
         {/* SCENE 1 — Timestamp & Facility Establishing Text */}
         {phase === 'cinematic' && !needsAutoplayTap && sceneId === 1 && (
           <div className="absolute left-8 bottom-14 md:left-14 md:bottom-16 animate-cinema-in">
-            <div className="bg-[#060b16]/90 border border-cyan-500/35 px-6 py-4 rounded">
+            <div className="bg-[#05070c]/92 border border-red-900/55 px-6 py-4 rounded shadow-2xl">
               <p className="font-mono-data text-xl md:text-2xl font-semibold tracking-widest text-cyan-300">
-                DECEMBER 2024
+                DECEMBER 2045
               </p>
               <p className="font-mono-data text-base md:text-lg text-slate-200 tracking-wider mt-0.5">
                 11:48 PM
               </p>
               <p className="text-xs text-slate-400 mt-2">
-                BioQuest Molecular Discovery Facility · Night Shift Operations
+                BioQuest Molecular Containment Facility · Deep-Night Shift
               </p>
             </div>
           </div>
@@ -186,18 +186,18 @@ export const CinematicOverlay: React.FC<CinematicOverlayProps> = ({
 
         {/* SCENE 5 — TITLE REVEAL SCREEN */}
         {phase === 'title' && (
-          <div className="pointer-events-auto max-w-2xl w-full bg-[#060b16]/90 border border-cyan-500/35 rounded-xl px-8 py-10 text-center shadow-2xl animate-cinema-in">
-            <p className="font-mono-data text-xs tracking-[0.22em] text-cyan-400 mb-3">
-              BIOTECHNOLOGY EDUCATIONAL THRILLER · FIVE RESEARCH VAULTS
+          <div className="pointer-events-auto max-w-2xl w-full max-h-[90dvh] overflow-y-auto terminal-scroll bg-[#05070d]/92 border border-red-900/50 rounded-xl px-5 py-6 sm:px-8 sm:py-10 text-center shadow-2xl animate-cinema-in">
+            <p className="font-mono-data text-[10px] sm:text-xs tracking-[0.18em] sm:tracking-[0.22em] text-red-400 mb-2.5 sm:mb-3">
+              DECEMBER 2045 · BIOTECH HORROR THRILLER · FIVE RESEARCH VAULTS
             </p>
-            <h1 className="font-display text-5xl md:text-6xl font-bold tracking-wider text-white mb-2">
+            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-bold tracking-wider text-white mb-1.5 sm:mb-2">
               BIOQUEST
             </h1>
-            <p className="font-display text-lg md:text-2xl font-semibold tracking-[0.2em] text-cyan-300 mb-5">
+            <p className="font-display text-base sm:text-lg md:text-2xl font-semibold tracking-[0.16em] sm:tracking-[0.2em] text-cyan-300 mb-4 sm:mb-5">
               THE BLACKOUT PROTOCOL
             </p>
-            <p className="text-sm md:text-base text-slate-300 max-w-lg mx-auto leading-relaxed mb-8">
-              Explore the locked research facility in first-person 3D, investigate the midnight system failure with NEXUS, and master bioactive molecule prediction across five secured vaults.
+            <p className="text-xs sm:text-sm md:text-base text-slate-300 max-w-lg mx-auto leading-relaxed mb-6 sm:mb-8">
+              Trapped inside a dark, leaking containment facility in 2045, navigate toxic corridors with NEXUS and unlock all five secured research vaults to escape.
             </p>
 
             {hasSavedProgress && (

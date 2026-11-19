@@ -10,8 +10,11 @@ export interface FacilityTextures {
   exitRestored: THREE.CanvasTexture;
   chemicalSpillGreen: THREE.CanvasTexture;
   chemicalSpillAmber: THREE.CanvasTexture;
+  bloodDragTrail: THREE.CanvasTexture;
   fingerprintsOverlay: THREE.CanvasTexture;
   specimenWarning: THREE.CanvasTexture;
+  fogSprite: THREE.CanvasTexture;
+  horrorWallScrawls: THREE.CanvasTexture[];
   vaultSigns: Map<number, THREE.CanvasTexture>;
   dispose: () => void;
 }
@@ -45,41 +48,84 @@ function configureTexture(
 export function createFacilityTextures(maxAnisotropy: number): FacilityTextures {
   const allTextures: THREE.CanvasTexture[] = [];
 
-  // 1. Sleek Biotech Lab Floor Tiles
+  // 1. Grungy, Corroded, Blood-Stained Dark Horror Lab Floor Tiles
   const [fCanvas, fCtx] = makeCanvas(512, 512);
-  fCtx.fillStyle = '#0d1422';
+  fCtx.fillStyle = '#07090d';
   fCtx.fillRect(0, 0, 512, 512);
-  // Subtle micro grid
-  fCtx.strokeStyle = '#18243a';
-  fCtx.lineWidth = 3;
+  // Dark grime & oil mottling across concrete/steel panels
+  for (let i = 0; i < 42; i++) {
+    const gx = (i * 97) % 512;
+    const gy = (i * 173) % 512;
+    const gr = 28 + (i % 5) * 18;
+    const g = fCtx.createRadialGradient(gx, gy, 2, gx, gy, gr);
+    g.addColorStop(0, i % 4 === 0 ? 'rgba(65, 12, 12, 0.28)' : 'rgba(18, 22, 26, 0.42)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    fCtx.fillStyle = g;
+    fCtx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+  }
+  // Rusted metallic floor panel seams
+  fCtx.strokeStyle = '#1b1718';
+  fCtx.lineWidth = 4;
   fCtx.strokeRect(4, 4, 248, 248);
   fCtx.strokeRect(260, 4, 248, 248);
   fCtx.strokeRect(4, 260, 248, 248);
   fCtx.strokeRect(260, 260, 248, 248);
-  // Faint specular metallic seam dots
-  fCtx.fillStyle = '#243656';
-  for (const x of [16, 240, 272, 496]) {
-    for (const y of [16, 240, 272, 496]) {
-      fCtx.fillRect(x - 2, y - 2, 4, 4);
-    }
+  // Jagged floor cracks
+  fCtx.strokeStyle = '#020305';
+  fCtx.lineWidth = 2.5;
+  fCtx.beginPath();
+  fCtx.moveTo(42, 18);
+  fCtx.lineTo(88, 92);
+  fCtx.lineTo(132, 118);
+  fCtx.lineTo(185, 205);
+  fCtx.moveTo(310, 290);
+  fCtx.lineTo(368, 355);
+  fCtx.lineTo(445, 392);
+  fCtx.stroke();
+  // Dried crimson splatter dots & scuff marks
+  fCtx.fillStyle = 'rgba(110, 14, 14, 0.45)';
+  for (const [bx, by, br] of [
+    [118, 124, 14],
+    [136, 134, 6],
+    [380, 340, 11],
+    [396, 362, 5],
+    [220, 420, 8],
+  ]) {
+    fCtx.beginPath();
+    fCtx.arc(bx, by, br, 0, Math.PI * 2);
+    fCtx.fill();
   }
   const floor = configureTexture(fCanvas, maxAnisotropy, 12, 10);
   allTextures.push(floor);
 
-  // 2. Futuristic Cleanroom Wall Panels
+  // 2. Weathered, Rust-Streaked Dark Containment Wall Panels
   const [wCanvas, wCtx] = makeCanvas(512, 512);
-  wCtx.fillStyle = '#121c2e';
+  wCtx.fillStyle = '#0a0c12';
   wCtx.fillRect(0, 0, 512, 512);
-  wCtx.fillStyle = '#172338';
-  wCtx.fillRect(10, 12, 492, 230);
-  wCtx.fillRect(10, 268, 492, 232);
-  wCtx.strokeStyle = '#0b111e';
-  wCtx.lineWidth = 4;
-  wCtx.strokeRect(10, 12, 492, 230);
-  wCtx.strokeRect(10, 268, 492, 232);
-  // Subtle cyan trim band along mid-wall
-  wCtx.fillStyle = '#0e7490';
-  wCtx.fillRect(0, 248, 512, 6);
+  wCtx.fillStyle = '#0e1118';
+  wCtx.fillRect(10, 12, 492, 228);
+  wCtx.fillRect(10, 270, 492, 230);
+  // Vertical leaking grime & rust streaks dripping downward
+  for (let i = 0; i < 18; i++) {
+    const sx = 24 + ((i * 67) % 468);
+    const len = 90 + (i % 4) * 70;
+    const grad = wCtx.createLinearGradient(sx, 12, sx, 12 + len);
+    grad.addColorStop(0, i % 3 === 0 ? 'rgba(95, 16, 16, 0.55)' : 'rgba(20, 26, 14, 0.52)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    wCtx.fillStyle = grad;
+    wCtx.fillRect(sx, 12, 6 + (i % 5) * 3, len);
+  }
+  wCtx.strokeStyle = '#040508';
+  wCtx.lineWidth = 5;
+  wCtx.strokeRect(10, 12, 492, 228);
+  wCtx.strokeRect(10, 270, 492, 230);
+  // Weathered dark crimson bio-hazard trim band
+  wCtx.fillStyle = '#5c1116';
+  wCtx.fillRect(0, 246, 512, 10);
+  wCtx.fillStyle = '#1f0709';
+  for (let x = 0; x < 512; x += 36) {
+    wCtx.fillRect(x, 246, 14, 10);
+  }
   const wall = configureTexture(wCanvas, maxAnisotropy, 8, 1);
   allTextures.push(wall);
 
@@ -97,7 +143,6 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
   mCtx.font = '14px monospace';
   mCtx.fillText('TARGET: EGFR / COX-2   ASSAY: IC50 SCREEN', 28, 74);
   mCtx.fillText('SMILES: Cc1ccc(NC(=O)c2ccccc2)cc1', 28, 100);
-  // Draw clean hexagon molecular ring diagram
   mCtx.strokeStyle = '#22d3ee';
   mCtx.lineWidth = 3;
   mCtx.beginPath();
@@ -110,7 +155,6 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
   }
   mCtx.closePath();
   mCtx.stroke();
-  // Bar graph on right
   mCtx.fillStyle = '#0ea5e9';
   const heights = [62, 108, 84, 130, 96, 118];
   heights.forEach((h, idx) => {
@@ -122,48 +166,47 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
   const monitorNormal = configureTexture(mCanvas, maxAnisotropy);
   allTextures.push(monitorNormal);
 
-  // 4. Glitched Critical Warning Monitor
+  // 4. Glitched Critical Horror Monitor
   const [gCanvas, gCtx] = makeCanvas(512, 320);
-  gCtx.fillStyle = '#1d070b';
+  gCtx.fillStyle = '#170306';
   gCtx.fillRect(0, 0, 512, 320);
-  // Corrupted horizontal glitch bands
   gCtx.fillStyle = '#450a0a';
-  gCtx.fillRect(0, 48, 512, 22);
-  gCtx.fillRect(0, 140, 512, 30);
-  gCtx.fillRect(0, 245, 512, 18);
-  gCtx.strokeStyle = '#ef4444';
-  gCtx.lineWidth = 4;
+  gCtx.fillRect(0, 42, 512, 26);
+  gCtx.fillRect(0, 136, 512, 34);
+  gCtx.fillRect(0, 240, 512, 22);
+  gCtx.strokeStyle = '#dc2626';
+  gCtx.lineWidth = 5;
   gCtx.strokeRect(10, 10, 492, 300);
-  gCtx.fillStyle = '#f87171';
+  gCtx.fillStyle = '#ef4444';
   gCtx.font = 'bold 28px monospace';
-  gCtx.fillText('CRITICAL SYSTEM FAILURE', 52, 112);
+  gCtx.fillText('CONTAINMENT BREACH 2045', 46, 108);
   gCtx.fillStyle = '#fca5a5';
   gCtx.font = 'bold 20px monospace';
-  gCtx.fillText('UNAUTHORIZED ACCESS DETECTED', 74, 152);
-  gCtx.fillStyle = '#ef4444';
+  gCtx.fillText('BIO-HAZARD LEVEL 5 · LOCKDOWN', 66, 152);
+  gCtx.fillStyle = '#f87171';
   gCtx.font = '15px monospace';
-  gCtx.fillText('ERR: SMILES_PARSE_FAULT // BQ-409', 82, 206);
-  gCtx.fillText('SAFEGUARD LEVEL 5 — LOCKDOWN ENGAGED', 74, 238);
+  gCtx.fillText('ERR: SPECIMEN ESCAPE // TOXIC LEAK', 84, 206);
+  gCtx.fillText('RECOVER ALL 5 VAULT KEYS TO ESCAPE', 84, 238);
   const monitorGlitch = configureTexture(gCanvas, maxAnisotropy);
   allTextures.push(monitorGlitch);
 
   // 5. Main Door Locked Screen (Place 5 Keys)
   const [eCanvas, eCtx] = makeCanvas(512, 256);
-  eCtx.fillStyle = '#1f080b';
+  eCtx.fillStyle = '#180306';
   eCtx.fillRect(0, 0, 512, 256);
-  eCtx.strokeStyle = '#ef4444';
+  eCtx.strokeStyle = '#dc2626';
   eCtx.lineWidth = 6;
   eCtx.strokeRect(12, 12, 488, 232);
   eCtx.fillStyle = '#ef4444';
-  eCtx.font = 'bold 32px monospace';
+  eCtx.font = 'bold 34px monospace';
   eCtx.textAlign = 'center';
-  eCtx.fillText('MAIN GATE LOCKED', 256, 86);
+  eCtx.fillText('MAIN GATE SEALED', 256, 86);
   eCtx.fillStyle = '#fca5a5';
   eCtx.font = 'bold 22px monospace';
   eCtx.fillText('PLACE ALL 5 KEYS AT CONSOLE', 256, 138);
   eCtx.fillStyle = '#f87171';
   eCtx.font = '16px monospace';
-  eCtx.fillText('MODERN WORLD GATEWAY · ACCESS DENIED', 256, 194);
+  eCtx.fillText('QUARANTINE PROTOCOL 2045 · NO EXIT', 256, 194);
   const exitLocked = configureTexture(eCanvas, maxAnisotropy);
   allTextures.push(exitLocked);
 
@@ -200,14 +243,13 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
   pCtx.strokeRect(260, 4, 248, 248);
   pCtx.strokeRect(4, 260, 248, 248);
   pCtx.strokeRect(260, 260, 248, 248);
-  // Subtle modern cyan solar inlay accent
   pCtx.fillStyle = '#38bdf8';
   pCtx.fillRect(250, 0, 12, 512);
   pCtx.fillRect(0, 250, 512, 12);
   const plazaGround = configureTexture(pCanvas, maxAnisotropy, 18, 18);
   allTextures.push(plazaGround);
 
-  // 6c. Toxic Chemical Spill Puddle (Green Acidic)
+  // 6c. Toxic Chemical Spill Puddles (Glowing Acidic Green & Corrosive Blood-Amber)
   const makeSpillTexture = (coreHex: string, midHex: string, edgeHex: string) => {
     const [sCanvas, sCtx] = makeCanvas(256, 256);
     sCtx.clearRect(0, 0, 256, 256);
@@ -222,20 +264,19 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
       sCtx.arc(cx, cy, r, 0, Math.PI * 2);
       sCtx.fill();
     };
-    drawBlob(128, 128, 86, 0.92);
-    drawBlob(82, 102, 48, 0.85);
-    drawBlob(174, 146, 54, 0.82);
-    drawBlob(148, 78, 36, 0.78);
-    drawBlob(72, 168, 30, 0.72);
-    // Tiny chemical bubbles
-    sCtx.globalAlpha = 0.65;
+    drawBlob(128, 128, 92, 0.95);
+    drawBlob(78, 98, 52, 0.88);
+    drawBlob(176, 148, 56, 0.86);
+    drawBlob(148, 76, 40, 0.82);
+    drawBlob(70, 170, 34, 0.78);
+    sCtx.globalAlpha = 0.72;
     sCtx.strokeStyle = '#ffffff';
-    sCtx.lineWidth = 1.5;
+    sCtx.lineWidth = 1.6;
     for (const [bx, by, br] of [
-      [115, 118, 6],
-      [148, 134, 4],
-      [96, 142, 5],
-      [162, 108, 3.5],
+      [115, 118, 7],
+      [148, 134, 4.5],
+      [96, 142, 5.5],
+      [162, 108, 4],
     ]) {
       sCtx.beginPath();
       sCtx.arc(bx, by, br, 0, Math.PI * 2);
@@ -246,10 +287,33 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
     return tex;
   };
 
-  const chemicalSpillGreen = makeSpillTexture('#a3e635', '#4d7c0f', 'rgba(20, 83, 45, 0)');
-  const chemicalSpillAmber = makeSpillTexture('#f59e0b', '#9a3412', 'rgba(69, 10, 10, 0)');
+  const chemicalSpillGreen = makeSpillTexture('#a3e635', '#3f6212', 'rgba(20, 83, 45, 0)');
+  const chemicalSpillAmber = makeSpillTexture('#dc2626', '#7f1d1d', 'rgba(45, 5, 5, 0)');
 
-  // 6d. Smudged Fingerprints, Frantic Palm Prints & Glass Streaks
+  // 6d. Crimson Blood & Sludge Floor Drag Trail (leading out of breached containment pods)
+  const [bdCanvas, bdCtx] = makeCanvas(256, 512);
+  bdCtx.clearRect(0, 0, 256, 512);
+  for (let i = 0; i < 6; i++) {
+    const x = 58 + i * 26 + Math.sin(i * 1.9) * 8;
+    const grad = bdCtx.createLinearGradient(x, 20, x, 495);
+    grad.addColorStop(0, 'rgba(135, 12, 16, 0.88)');
+    grad.addColorStop(0.55, 'rgba(92, 8, 12, 0.65)');
+    grad.addColorStop(1, 'rgba(40, 4, 6, 0)');
+    bdCtx.fillStyle = grad;
+    bdCtx.fillRect(x - 6, 20, 12 + (i % 2) * 6, 475);
+  }
+  for (let s = 0; s < 24; s++) {
+    const sx = 30 + ((s * 43) % 196);
+    const sy = 30 + ((s * 83) % 440);
+    bdCtx.fillStyle = 'rgba(155, 16, 20, 0.72)';
+    bdCtx.beginPath();
+    bdCtx.arc(sx, sy, 3 + (s % 6) * 2.5, 0, Math.PI * 2);
+    bdCtx.fill();
+  }
+  const bloodDragTrail = configureTexture(bdCanvas, maxAnisotropy);
+  allTextures.push(bloodDragTrail);
+
+  // 6e. Vivid Bloody Palm Prints, Frantic Claw Drag Marks & Fingerprints
   const [fpCanvas, fpCtx] = makeCanvas(512, 512);
   fpCtx.clearRect(0, 0, 512, 512);
   const drawHandprint = (cx: number, cy: number, scale: number, rot: number, stainColor: string) => {
@@ -258,44 +322,41 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
     fpCtx.rotate(rot);
     fpCtx.scale(scale, scale);
     fpCtx.fillStyle = stainColor;
-    // Palm smudge
     fpCtx.beginPath();
-    fpCtx.ellipse(0, 16, 26, 30, 0, 0, Math.PI * 2);
+    fpCtx.ellipse(0, 16, 28, 32, 0, 0, Math.PI * 2);
     fpCtx.fill();
-    // Five smeared fingers + drag streaks downward
     const fingers: Array<[number, number, number, number]> = [
-      [-28, -4, 7, 19],
-      [-15, -28, 7, 24],
-      [0, -34, 7.5, 27],
-      [15, -26, 7, 23],
-      [27, -14, 6.5, 18],
+      [-30, -4, 7.5, 20],
+      [-15, -30, 7.5, 26],
+      [0, -36, 8, 29],
+      [16, -28, 7.5, 25],
+      [29, -15, 7, 19],
     ];
     for (const [fx, fy, rx, ry] of fingers) {
       fpCtx.beginPath();
       fpCtx.ellipse(fx, fy, rx, ry, 0, 0, Math.PI * 2);
       fpCtx.fill();
-      // Subtle downward smudge trail
-      fpCtx.fillRect(fx - 2.5, fy, 5, 42);
+      // Long frantic downward claw drag streaks
+      fpCtx.fillRect(fx - 3, fy, 6, 86);
     }
     fpCtx.restore();
   };
 
-  drawHandprint(140, 210, 1.25, -0.18, 'rgba(153, 27, 27, 0.46)');
-  drawHandprint(350, 280, 1.1, 0.24, 'rgba(132, 204, 22, 0.34)');
-  drawHandprint(255, 130, 0.85, 0.08, 'rgba(148, 163, 184, 0.32)');
-  // Scattered individual fingerprint whorls
+  drawHandprint(145, 195, 1.38, -0.16, 'rgba(185, 18, 22, 0.78)');
+  drawHandprint(355, 265, 1.25, 0.22, 'rgba(153, 14, 18, 0.68)');
+  drawHandprint(255, 120, 0.95, 0.08, 'rgba(132, 204, 22, 0.56)');
   for (const [fx, fy, col] of [
-    [90, 360, 'rgba(185, 28, 28, 0.42)'],
-    [112, 345, 'rgba(185, 28, 28, 0.35)'],
-    [134, 355, 'rgba(185, 28, 28, 0.3)'],
-    [390, 120, 'rgba(163, 230, 53, 0.36)'],
-    [412, 136, 'rgba(163, 230, 53, 0.28)'],
-    [220, 410, 'rgba(203, 213, 225, 0.34)'],
-    [244, 398, 'rgba(203, 213, 225, 0.28)'],
+    [88, 360, 'rgba(205, 22, 26, 0.7)'],
+    [112, 345, 'rgba(205, 22, 26, 0.62)'],
+    [136, 355, 'rgba(205, 22, 26, 0.56)'],
+    [390, 120, 'rgba(163, 230, 53, 0.62)'],
+    [412, 136, 'rgba(163, 230, 53, 0.52)'],
+    [220, 410, 'rgba(185, 28, 28, 0.58)'],
+    [244, 398, 'rgba(185, 28, 28, 0.52)'],
   ] as Array<[number, number, string]>) {
     fpCtx.strokeStyle = col;
-    fpCtx.lineWidth = 2;
-    for (let r = 4; r <= 12; r += 3.5) {
+    fpCtx.lineWidth = 2.4;
+    for (let r = 4; r <= 13; r += 3.5) {
       fpCtx.beginPath();
       fpCtx.ellipse(fx, fy, r * 0.72, r, 0.2, 0, Math.PI * 2);
       fpCtx.stroke();
@@ -304,25 +365,73 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
   const fingerprintsOverlay = configureTexture(fpCanvas, maxAnisotropy);
   allTextures.push(fingerprintsOverlay);
 
-  // 6e. Cracked Failed Bio-Specimen Warning Plate
+  // 6f. Cracked Failed Bio-Specimen Warning Plate
   const [spCanvas, spCtx] = makeCanvas(256, 128);
-  spCtx.fillStyle = '#180a0b';
+  spCtx.fillStyle = '#180507';
   spCtx.fillRect(0, 0, 256, 128);
-  spCtx.strokeStyle = '#d97706';
+  spCtx.strokeStyle = '#dc2626';
   spCtx.lineWidth = 5;
   spCtx.strokeRect(6, 6, 244, 116);
-  spCtx.fillStyle = '#f59e0b';
+  spCtx.fillStyle = '#ef4444';
   spCtx.font = 'bold 20px monospace';
   spCtx.textAlign = 'center';
-  spCtx.fillText('CONTAINMENT FAULT', 128, 46);
-  spCtx.fillStyle = '#ef4444';
+  spCtx.fillText('CONTAINMENT BREACH', 128, 46);
+  spCtx.fillStyle = '#fca5a5';
   spCtx.font = 'bold 16px monospace';
-  spCtx.fillText('FAILED EXPERIMENT', 128, 78);
+  spCtx.fillText('FAILED SPECIMEN', 128, 78);
   spCtx.fillStyle = '#a3e635';
   spCtx.font = '13px monospace';
-  spCtx.fillText('TOXIC VAPOR LEAK · [E] AUDIT', 128, 106);
+  spCtx.fillText('DO NOT APPROACH · BIO-LEAK', 128, 106);
   const specimenWarning = configureTexture(spCanvas, maxAnisotropy);
   allTextures.push(specimenWarning);
+
+  // 6g. Soft Volumetric Mist Sprite Texture (for thick eerie floor fog & toxic vapor)
+  const [fogCanvas, fogCtx] = makeCanvas(128, 128);
+  const fGrad = fogCtx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  fGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+  fGrad.addColorStop(0.4, 'rgba(210, 235, 220, 0.35)');
+  fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  fogCtx.fillStyle = fGrad;
+  fogCtx.fillRect(0, 0, 128, 128);
+  const fogSprite = configureTexture(fogCanvas, maxAnisotropy);
+  allTextures.push(fogSprite);
+
+  // 6h. Scrawled Desperate Bloody Wall Warnings
+  const makeScrawl = (line1: string, line2: string) => {
+    const [scCanvas, scCtx] = makeCanvas(512, 256);
+    scCtx.clearRect(0, 0, 512, 256);
+    scCtx.save();
+    scCtx.translate(256, 118);
+    scCtx.rotate(-0.06);
+    scCtx.textAlign = 'center';
+    scCtx.fillStyle = 'rgba(185, 16, 20, 0.88)';
+    scCtx.font = 'bold 46px monospace';
+    scCtx.fillText(line1, 0, -10);
+    scCtx.fillStyle = 'rgba(148, 12, 16, 0.82)';
+    scCtx.font = 'bold 34px monospace';
+    scCtx.fillText(line2, 0, 44);
+    scCtx.restore();
+    // Dripping blood streaks from letters
+    for (let d = 0; d < 18; d++) {
+      const dx = 68 + ((d * 29) % 380);
+      const dy = 110 + (d % 3) * 28;
+      const dLen = 28 + (d % 5) * 18;
+      const g = scCtx.createLinearGradient(dx, dy, dx, dy + dLen);
+      g.addColorStop(0, 'rgba(170, 14, 18, 0.78)');
+      g.addColorStop(1, 'rgba(90, 5, 8, 0)');
+      scCtx.fillStyle = g;
+      scCtx.fillRect(dx, dy, 3 + (d % 3), dLen);
+    }
+    const tex = configureTexture(scCanvas, maxAnisotropy);
+    allTextures.push(tex);
+    return tex;
+  };
+
+  const horrorWallScrawls = [
+    makeScrawl("DON'T LOOK UP", 'IT IS WATCHING'),
+    makeScrawl('BREACH 2045', 'DO NOT BREATHE'),
+    makeScrawl('5 KEYS OR DIE', 'GET OUT NOW'),
+  ];
 
   // 7. Vault Header Signs
   const vaultMeta: Array<{ id: number; code: string; title: string; color: string }> = [
@@ -363,8 +472,11 @@ export function createFacilityTextures(maxAnisotropy: number): FacilityTextures 
     exitRestored,
     chemicalSpillGreen,
     chemicalSpillAmber,
+    bloodDragTrail,
     fingerprintsOverlay,
     specimenWarning,
+    fogSprite,
+    horrorWallScrawls,
     vaultSigns,
     dispose: () => {
       allTextures.forEach((t) => t.dispose());
