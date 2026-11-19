@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Chakra Petch", sans-serif;
+  --font-sans: "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #060911;
+    color: #f1f5f9;
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle scanline and glitch effects strictly for cinematic / hologram sequences */
+@keyframes scanlineSweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes subtleGlitch {
+  0%, 92%, 100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  93% {
+    transform: translate(-3px, 1px);
+    opacity: 0.88;
+  }
+  95% {
+    transform: translate(3px, -1px);
+    opacity: 0.94;
+  }
+  97% {
+    transform: translate(-1px, 0);
+    opacity: 0.85;
+  }
+}
+
+@keyframes cinemaFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-scanline {
+  animation: scanlineSweep 6s linear infinite;
+}
+
+.animate-glitch {
+  animation: subtleGlitch 2.4s steps(2, end) infinite;
+}
+
+.animate-cinema-in {
+  animation: cinemaFadeIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-scanline,
+  .animate-glitch,
+  .animate-cinema-in {
+    animation: none !important;
+  }
+}
+
+/* Thin custom scrollbars for terminal modals */
+.terminal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.terminal-scroll::-webkit-scrollbar-track {
+  background: #0a101d;
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}

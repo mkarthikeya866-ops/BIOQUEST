@@ -1,0 +1,676 @@
+import React, { useMemo, useState } from 'react';
+import {
+  X,
+  BookOpen,
+  FlaskConical,
+  FileWarning,
+  HelpCircle,
+  CheckCircle2,
+  AlertTriangle,
+  KeyRound,
+  Cpu,
+  ChevronRight,
+  RotateCcw,
+} from 'lucide-react';
+import {
+  ClassificationChallenge,
+  MatchingChallenge,
+  MultiSelectChallenge,
+  MultipleChoiceChallenge,
+  VaultDefinition,
+} from '../types/game';
+import { MoleculeDiagram } from './MoleculeDiagram';
+import { soundEngine } from '../audio/soundEngine';
+
+interface VaultTerminalModalProps {
+  vault: VaultDefinition;
+  alreadyCompleted: boolean;
+  onCompleteVault: (vault: VaultDefinition) => void;
+  onClose: () => void;
+}
+
+type TerminalTab = 'concepts' | 'challenges' | 'story';
+
+export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
+  vault,
+  alreadyCompleted,
+  onCompleteVault,
+  onClose,
+}) => {
+  const [activeTab, setActiveTab] = useState<TerminalTab>('concepts');
+  const [challengeIdx, setChallengeIdx] = useState(0);
+  const [showHint, setShowHint] = useState(false);
+  const [feedback, setFeedback] = useState<{ status: 'correct' | 'incorrect'; text: string } | null>(null);
+  const [vaultClearedNow, setVaultClearedNow] = useState(false);
+
+  // Per-challenge answer states
+  const [selectedMc, setSelectedMc] = useState<string | null>(null);
+  const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
+  const [matchAnswers, setMatchAnswers] = useState<Record<string, string>>({});
+  const [classAnswers, setClassAnswers] = useState<Record<string, string>>({});
+
+  const currentChallenge = vault.challenges[challengeIdx];
+
+  // Deterministically shuffle right-hand matching options per challenge
+  const shuffledRightLabels = useMemo(() => {
+    if (currentChallenge.type !== 'matching') return [];
+    const items = currentChallenge.pairs.map((p) => p.rightLabel);
+    // Deterministic rotation/interleave so order never equals left order
+    if (items.length <= 1) return items;
+    return [...items.slice(1), items[0]];
+  }, [currentChallenge]);
+
+  const resetChallengeInputs = () => {
+    setSelectedMc(null);
+    setSelectedMulti([]);
+    setMatchAnswers({});
+    setClassAnswers({});
+    setShowHint(false);
+    setFeedback(null);
+  };
+
+  const handleToggleHint = () => {
+    soundEngine.playButtonClick();
+    if (!showHint) {
+      soundEngine.speakNexus(currentChallenge.hint);
+    }
+    setShowHint((prev) => !prev);
+  };
+
+  const evaluateCurrentChallenge = () => {
+    let isCorrect = false;
+
+    if (currentChallenge.type === 'multiple-choice') {
+      if (!selectedMc) return;
+      isCorrect = selectedMc === currentChallenge.correctOptionId;
+    } else if (currentChallenge.type === 'multi-select') {
+      if (selectedMulti.length === 0) return;
+      const expected = [...currentChallenge.correctOptionIds].sort();
+      const actual = [...selectedMulti].sort();
+      isCorrect = expected.length === actual.length && expected.every((v, i) => v === actual[i]);
+    } else if (currentChallenge.type === 'matching') {
+      const allAnswered = currentChallenge.pairs.every((p) => Boolean(matchAnswers[p.id]));
+      if (!allAnswered) return;
+      isCorrect = currentChallenge.pairs.every((p) => matchAnswers[p.id] === p.rightLabel);
+    } else if (currentChallenge.type === 'classification') {
+      const allAnswered = currentChallenge.items.every((item) => Boolean(classAnswers[item.id]));
+      if (!allAnswered) return;
+      isCorrect = currentChallenge.items.every((item) => classAnswers[item.id] === item.correctCategory);
+    }
+
+    if (isCorrect) {
+      soundEngine.playCorrect();
+      setFeedback({ status: 'correct', text: currentChallenge.correctExplanation });
+      soundEngine.speakNexus(currentChallenge.correctExplanation);
+    } else {
+      soundEngine.playIncorrect();
+      setFeedback({ status: 'incorrect', text: currentChallenge.incorrectExplanation });
+      soundEngine.speakNexus(currentChallenge.incorrectExplanation);
+    }
+  };
+
+  const handleNextChallenge = () => {
+    soundEngine.playButtonClick();
+    if (challengeIdx + 1 < vault.challenges.length) {
+      setChallengeIdx((i) => i + 1);
+      resetChallengeInputs();
+    } else {
+      setVaultClearedNow(true);
+      onCompleteVault(vault);
+    }
+  };
+
+  const canSubmit = (() => {
+    if (feedback?.status === 'correct') return false;
+    if (currentChallenge.type === 'multiple-choice') return selectedMc !== null;
+    if (currentChallenge.type === 'multi-select') return selectedMulti.length > 0;
+    if (currentChallenge.type === 'matching') {
+      return currentChallenge.pairs.every((p) => Boolean(matchAnswers[p.id]));
+    }
+    if (currentChallenge.type === 'classification') {
+      return currentChallenge.items.every((i) => Boolean(classAnswers[i.id]));
+    }
+    return false;
+  })();
+
+  const renderChallengeBody = () => {
+    if (currentChallenge.type === 'multiple-choice') {
+      const ch = currentChallenge as MultipleChoiceChallenge;
+      return (
+        <div className="space-y-4">
+          {ch.moleculeDiagram && (
+            <div className="bg-[#060b16] border border-slate-800 rounded p-4 flex flex-col items-center">
+              <MoleculeDiagram id={ch.moleculeDiagram} className="w-64 h-24" />
+              <span className="text-xs font-mono-data text-slate-400 mt-1">
+                Recovered Molecular Structure Schematic
+              </span>
+            </div>
+          )}
+
+          {ch.contextData && (
+            <div className="bg-[#060b16] border border-slate-800 rounded p-4">
+              <p className="text-xs font-mono-data text-cyan-400 mb-3">{ch.contextData.title}</p>
+              <div className="divide-y divide-slate-800/80">
+                {ch.contextData.rows.map((row, idx) => (
+                  <div key={idx} className="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span className="text-slate-400">{row.label}</span>
+                    <span
+                      className={`font-mono-data font-medium ${
+                        row.highlight === 'red'
+                          ? 'text-red-400'
+                          : row.highlight === 'amber'
+                            ? 'text-amber-300'
+                            : row.highlight === 'emerald'
+                              ? 'text-emerald-400'
+                              : row.highlight === 'cyan'
+                                ? 'text-cyan-300'
+                                : 'text-slate-200'
+                      }`}
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            {ch.options.map((opt) => {
+              const selected = selectedMc === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playButtonClick();
+                    setSelectedMc(opt.id);
+                    if (feedback?.status === 'incorrect') setFeedback(null);
+                  }}
+                  className={`w-full text-left p-4 rounded border transition-colors cursor-pointer ${
+                    selected
+                      ? 'bg-cyan-950/60 border-cyan-400 text-white'
+                      : 'bg-[#0b1324] border-slate-800 text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <p className="text-sm font-semibold leading-snug">{opt.label}</p>
+                  {opt.sublabel && <p className="text-xs text-slate-400 mt-1">{opt.sublabel}</p>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    if (currentChallenge.type === 'multi-select') {
+      const ch = currentChallenge as MultiSelectChallenge;
+      const toggleOption = (id: string) => {
+        soundEngine.playButtonClick();
+        setSelectedMulti((prev) =>
+          prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+        );
+        if (feedback?.status === 'incorrect') setFeedback(null);
+      };
+      return (
+        <div className="space-y-3">
+          <p className="text-xs font-mono-data text-slate-400">{ch.instruction}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {ch.options.map((opt) => {
+              const checked = selectedMulti.includes(opt.id);
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggleOption(opt.id)}
+                  className={`text-left p-4 rounded border transition-colors cursor-pointer ${
+                    checked
+                      ? 'bg-cyan-950/60 border-cyan-400 text-white'
+                      : 'bg-[#0b1324] border-slate-800 text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">{opt.label}</span>
+                    <span
+                      className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                        checked ? 'bg-cyan-400 border-cyan-400 text-slate-950 font-bold' : 'border-slate-600'
+                      }`}
+                    >
+                      {checked ? '✓' : ''}
+                    </span>
+                  </div>
+                  {opt.code && (
+                    <p className="font-mono-data text-sm text-cyan-300 mt-2 bg-[#060b16] px-2.5 py-1.5 rounded border border-slate-800">
+                      {opt.code}
+                    </p>
+                  )}
+                  {opt.detail && <p className="text-xs text-slate-400 mt-1.5">{opt.detail}</p>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    if (currentChallenge.type === 'matching') {
+      const ch = currentChallenge as MatchingChallenge;
+      return (
+        <div className="space-y-3">
+          {ch.pairs.map((pair) => (
+            <div
+              key={pair.id}
+              className="bg-[#0b1324] border border-slate-800 rounded p-3.5 grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
+            >
+              <div className="md:col-span-5 flex items-center gap-3">
+                {pair.moleculeDiagram && (
+                  <div className="bg-[#060b16] border border-slate-800 rounded p-1.5 shrink-0">
+                    <MoleculeDiagram id={pair.moleculeDiagram} className="w-20 h-12" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-white">{pair.leftLabel}</p>
+                  {pair.leftCode && (
+                    <p className="font-mono-data text-xs text-cyan-300 mt-0.5">{pair.leftCode}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-7">
+                <select
+                  value={matchAnswers[pair.id] || ''}
+                  onChange={(e) => {
+                    soundEngine.playButtonClick();
+                    setMatchAnswers((prev) => ({ ...prev, [pair.id]: e.target.value }));
+                    if (feedback?.status === 'incorrect') setFeedback(null);
+                  }}
+                  className="w-full bg-[#060b16] border border-slate-700 focus:border-cyan-400 rounded px-3 py-2 text-sm text-slate-100 outline-none cursor-pointer"
+                >
+                  <option value="">Select matching description...</option>
+                  {shuffledRightLabels.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // classification
+    const ch = currentChallenge as ClassificationChallenge;
+    return (
+      <div className="space-y-4">
+        <div className="bg-cyan-950/35 border border-cyan-500/35 rounded px-4 py-2.5 text-xs font-mono-data text-cyan-200">
+          {ch.ruleSummary}
+        </div>
+        <div className="space-y-2.5">
+          {ch.items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-[#0b1324] border border-slate-800 rounded p-3.5 flex flex-wrap items-center justify-between gap-3"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white">{item.name}</p>
+                <p className="text-xs font-mono-data text-slate-400 mt-0.5">{item.metric}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {ch.categories.map((cat) => {
+                  const chosen = classAnswers[item.id] === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playButtonClick();
+                        setClassAnswers((prev) => ({ ...prev, [item.id]: cat }));
+                        if (feedback?.status === 'incorrect') setFeedback(null);
+                      }}
+                      className={`px-3.5 py-1.5 text-xs font-semibold rounded border transition-colors cursor-pointer whitespace-nowrap ${
+                        chosen
+                          ? 'bg-cyan-400 border-cyan-400 text-slate-950'
+                          : 'bg-[#060b16] border-slate-700 text-slate-300 hover:border-slate-500'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-3 md:p-6">
+      <div className="max-w-4xl w-full max-h-[90vh] bg-[#080f1e] border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 bg-[#0c1629] border-b border-slate-800 flex items-center justify-between gap-4 shrink-0">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-mono-data text-cyan-400">
+              <span>{vault.code}</span>
+              <span aria-hidden="true">·</span>
+              <span>{vault.difficulty}</span>
+              <span aria-hidden="true">·</span>
+              <span className="text-slate-400">{vault.wing}</span>
+              {alreadyCompleted && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-emerald-400">KEY COLLECTED</span>
+                </>
+              )}
+            </div>
+            <h2 className="font-display text-2xl font-bold text-white mt-0.5">{vault.title}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close vault terminal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigation Tabs */}
+        {!vaultClearedNow && (
+          <div className="px-6 py-2.5 bg-[#091224] border-b border-slate-800 flex items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playButtonClick();
+                  setActiveTab('concepts');
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'concepts'
+                    ? 'bg-cyan-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Concept Guide ({vault.concepts.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playButtonClick();
+                  setActiveTab('challenges');
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'challenges'
+                    ? 'bg-cyan-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                <span>
+                  Challenges ({challengeIdx + 1}/{vault.challenges.length})
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playButtonClick();
+                  setActiveTab('story');
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'story'
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <FileWarning className="w-3.5 h-3.5" />
+                <span>Incident Log</span>
+              </button>
+            </div>
+
+            <span className="hidden sm:inline text-xs font-mono-data text-slate-400">
+              Reward: {vault.keyName}
+            </span>
+          </div>
+        )}
+
+        {/* Main Scrollable Workspace */}
+        <div className="flex-1 overflow-y-auto terminal-scroll p-6">
+          {vaultClearedNow ? (
+            /* KEY COLLECTION CELEBRATION */
+            <div className="max-w-xl mx-auto text-center py-6 space-y-6 animate-cinema-in">
+              <div className="w-20 h-20 rounded-full bg-emerald-950/70 border-2 border-emerald-400 flex items-center justify-center mx-auto">
+                <KeyRound className="w-10 h-10 text-emerald-300" />
+              </div>
+              <div>
+                <p className="font-mono-data text-xs tracking-widest text-emerald-400 mb-1">
+                  AUTHENTICATION KEY RECOVERED
+                </p>
+                <h3 className="font-display text-3xl font-bold text-white">
+                  {vault.keyName} Acquired
+                </h3>
+                <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+                  {vault.nexusCompletion}
+                </p>
+              </div>
+
+              <div className="bg-[#060b16] border border-amber-500/35 rounded-lg p-5 text-left">
+                <div className="flex items-center gap-2 text-xs font-mono-data text-amber-400 mb-2">
+                  <FileWarning className="w-4 h-4" />
+                  <span>STORY CLUE UNCOVERED · {vault.storyLog.code}</span>
+                </div>
+                <p className="text-sm font-semibold text-white mb-2">{vault.storyLog.title}</p>
+                <div className="space-y-2 text-xs font-mono-data text-slate-300 leading-relaxed">
+                  {vault.storyLog.body.map((line, i) => (
+                    <p key={i}>{line}</p>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playButtonClick();
+                    setVaultClearedNow(false);
+                    setChallengeIdx(0);
+                    resetChallengeInputs();
+                    setActiveTab('challenges');
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-slate-200 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Replay Challenges</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-2.5 text-sm font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded transition-colors cursor-pointer"
+                >
+                  Return to 3D Laboratory
+                </button>
+              </div>
+            </div>
+          ) : activeTab === 'concepts' ? (
+            <div className="space-y-5">
+              {/* NEXUS Briefing Box */}
+              <div className="bg-cyan-950/35 border border-cyan-500/35 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-xs font-mono-data text-cyan-400 mb-1.5">
+                  <Cpu className="w-4 h-4" />
+                  <span>NEXUS BRIEFING</span>
+                </div>
+                <p className="text-sm text-cyan-50 leading-relaxed">{vault.nexusIntro}</p>
+              </div>
+
+              {/* Concepts List with 2 Examples Each */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {vault.concepts.map((concept) => (
+                  <div
+                    key={concept.term}
+                    className="bg-[#0b1324] border border-slate-800 rounded-lg p-4 flex flex-col justify-between"
+                  >
+                    <div>
+                      <h3 className="font-display text-base font-bold text-cyan-300 mb-1.5">
+                        {concept.term}
+                      </h3>
+                      <p className="text-sm text-slate-200 leading-relaxed mb-3">
+                        {concept.explanation}
+                      </p>
+                    </div>
+                    <div className="pt-3 border-t border-slate-800 space-y-1.5">
+                      <p className="text-[11px] font-mono-data text-slate-400">EXAMPLES</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        1. {concept.examples[0]}
+                      </p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        2. {concept.examples[1]}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playButtonClick();
+                    setActiveTab('challenges');
+                  }}
+                  className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded transition-colors cursor-pointer"
+                >
+                  <span>Start Vault Challenges</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : activeTab === 'story' ? (
+            <div className="space-y-4 max-w-2xl mx-auto">
+              <div className="flex items-center gap-3 text-xs font-mono-data text-amber-400">
+                <span>{vault.storyLog.classification}</span>
+                <span aria-hidden="true">·</span>
+                <span>{vault.storyLog.code}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-slate-400">{vault.storyLog.timestamp}</span>
+              </div>
+              <h3 className="font-display text-2xl font-bold text-white">{vault.storyLog.title}</h3>
+              <div className="bg-[#060b16] border border-slate-800 rounded-lg p-5 font-mono-data text-sm text-slate-200 space-y-3 leading-relaxed">
+                {vault.storyLog.body.map((p, idx) => (
+                  <p key={idx}>{p}</p>
+                ))}
+              </div>
+              <div className="bg-cyan-950/35 border border-cyan-500/35 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-xs font-mono-data text-cyan-400 mb-1">
+                  <Cpu className="w-4 h-4" />
+                  <span>NEXUS NOTE</span>
+                </div>
+                <p className="text-sm text-cyan-100 leading-relaxed">{vault.storyLog.nexusNote}</p>
+              </div>
+            </div>
+          ) : (
+            /* CHALLENGES TAB */
+            <div className="space-y-5 max-w-3xl mx-auto">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs font-mono-data text-cyan-400">
+                  CHALLENGE {challengeIdx + 1} OF {vault.challenges.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleHint}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-300 bg-amber-950/40 border border-amber-500/40 hover:bg-amber-950/70 rounded transition-colors cursor-pointer"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>{showHint ? 'Hide NEXUS Hint' : 'Ask NEXUS for Hint'}</span>
+                </button>
+              </div>
+
+              <h3 className="text-base md:text-lg font-semibold text-white leading-relaxed">
+                {currentChallenge.prompt}
+              </h3>
+
+              {showHint && (
+                <div className="bg-amber-950/30 border border-amber-500/40 rounded p-3.5 text-sm text-amber-100">
+                  <span className="font-mono-data text-xs text-amber-400 block mb-1">NEXUS HINT</span>
+                  {currentChallenge.hint}
+                </div>
+              )}
+
+              {renderChallengeBody()}
+
+              {/* Feedback Banner */}
+              {feedback && (
+                <div
+                  className={`rounded-lg p-4 border ${
+                    feedback.status === 'correct'
+                      ? 'bg-emerald-950/45 border-emerald-500/60 text-emerald-100'
+                      : 'bg-red-950/45 border-red-500/60 text-red-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-xs font-mono-data font-semibold mb-1">
+                    {feedback.status === 'correct' ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400">VERIFIED — SCIENTIFICALLY ACCURATE</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-red-400" />
+                        <span className="text-red-400">RECHECK RESULT — NEXUS EXPLANATION</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed">{feedback.text}</p>
+                </div>
+              )}
+
+              {/* Action Footer */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playButtonClick();
+                    setActiveTab('concepts');
+                  }}
+                  className="text-xs font-medium text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  Review Concept Guide
+                </button>
+
+                {feedback?.status === 'correct' ? (
+                  <button
+                    type="button"
+                    onClick={handleNextChallenge}
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded transition-colors cursor-pointer"
+                  >
+                    <span>
+                      {challengeIdx + 1 < vault.challenges.length
+                        ? 'Next Challenge'
+                        : `Claim ${vault.keyName}`}
+                    </span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!canSubmit}
+                    onClick={evaluateCurrentChallenge}
+                    className={`px-6 py-2.5 text-sm font-semibold rounded transition-colors ${
+                      canSubmit
+                        ? 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 cursor-pointer'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    Verify Answer
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
