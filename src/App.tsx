@@ -457,17 +457,35 @@ export default function App() {
     if (sceneId === 1 && t >= 4.4 && !cues.has('s1-transfer')) {
       cues.add('s1-transfer');
       soundEngine.setAmbience('alert-tension');
-      soundEngine.playTerminalOpen();
+      soundEngine.playHorrorRiser(4.5);
     }
     if (sceneId === 2 && !cues.has('s2-breach')) {
       cues.add('s2-breach');
-      soundEngine.playElectricalSpark();
+      soundEngine.playHorrorSystemFailure();
       soundEngine.startEmergencyAlarm();
+    }
+    if (sceneId === 2 && t >= 11.4 && !cues.has('s2-shock')) {
+      cues.add('s2-shock');
+      soundEngine.playHeartbeatPulse();
+      soundEngine.playElectricalSpark();
+    }
+    if (sceneId === 2 && t >= 13.0 && !cues.has('s2-horror-sting')) {
+      cues.add('s2-horror-sting');
+      soundEngine.playHorrorGlitchSting();
+    }
+    if (sceneId === 2 && t >= 15.1 && !cues.has('s2-grid-drop')) {
+      cues.add('s2-grid-drop');
+      soundEngine.playHeartbeatPulse();
+      soundEngine.playPowerDown();
     }
     if (sceneId === 3 && !cues.has('s3-lockdown')) {
       cues.add('s3-lockdown');
-      soundEngine.playBlastDoorSlam();
       soundEngine.stopEmergencyAlarm();
+      soundEngine.playBlastDoorSlam();
+      soundEngine.playDistantLabCreak();
+    }
+    if (sceneId === 3 && t >= 19.6 && !cues.has('s3-nexus-core')) {
+      cues.add('s3-nexus-core');
       soundEngine.setAmbience('gameplay-thriller');
       soundEngine.playHologramActivate();
     }

@@ -23,8 +23,11 @@ class SoundEngine {
   private sfxGain: GainNode | null = null;
 
   private ambienceNodes: AudioNode[] = [];
+  private cinematicHorrorNodes: AudioNode[] = [];
+  private cinematicHorrorTimers: number[] = [];
   private ambienceMode: AmbienceMode = 'off';
   private alarmInterval: number | null = null;
+  private distortionCurve: Float32Array<ArrayBuffer> | null = null;
 
   private settings: AudioSettings = {
     muted: false,
@@ -87,6 +90,43 @@ class SoundEngine {
     this.masterGain.gain.setTargetAtTime(this.settings.muted ? 0 : 1, now, 0.04);
     this.musicGain.gain.setTargetAtTime(this.settings.musicVolume, now, 0.08);
     this.sfxGain.gain.setTargetAtTime(this.settings.sfxVolume, now, 0.04);
+  }
+
+  private getDistortionCurve(amount = 42): Float32Array<ArrayBuffer> {
+    if (this.distortionCurve && amount === 42) return this.distortionCurve;
+    const samples = 1024;
+    const curve = new Float32Array(new ArrayBuffer(samples * 4));
+    const deg = Math.PI / 180;
+    for (let i = 0; i < samples; i++) {
+      const x = (i * 2) / samples - 1;
+      curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+    }
+    if (amount === 42) {
+      this.distortionCurve = curve;
+    }
+    return curve;
+  }
+
+  private trackHorrorNode(...nodes: AudioNode[]) {
+    this.cinematicHorrorNodes.push(...nodes);
+  }
+
+  public stopCinematicHorror() {
+    for (const timerId of this.cinematicHorrorTimers) {
+      window.clearTimeout(timerId);
+    }
+    this.cinematicHorrorTimers = [];
+    for (const node of this.cinematicHorrorNodes) {
+      try {
+        if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
+          (node as OscillatorNode).stop();
+        }
+        node.disconnect();
+      } catch {
+        // already stopped
+      }
+    }
+    this.cinematicHorrorNodes = [];
   }
 
   public stopAmbience() {
@@ -195,20 +235,42 @@ class SoundEngine {
       createDrone(196.0, 'sine', 0.06, -3); // G3
       createDrone(293.66, 'sine', 0.035, 6); // D4
     } else if (mode === 'alert-tension') {
-      // Dark suspenseful sub pulse
-      const d1 = createDrone(55.0, 'sawtooth', 0.16);
-      createDrone(58.27, 'sawtooth', 0.12, 8); // dissonant minor second
-      createDrone(110.0, 'triangle', 0.09);
+      // Sci-Fi Horror Dread Bed: beating sub-bass abyss + dissonant tritone strings + eerie bowed ghost harmonics
+      const sub1 = createDrone(38.89, 'sawtooth', 0.22, 0, 175); // Eb1 ominous sub
+      createDrone(41.2, 'sawtooth', 0.17, 6, 185); // E1 beating minor-second shudder
+      const tritone = createDrone(110.0, 'sawtooth', 0.11, -9, 460); // A2 dark body
+      const clash = createDrone(155.56, 'sawtooth', 0.095, 11, 520); // Eb3 devil's tritone
+      createDrone(164.81, 'triangle', 0.065, -7, 560); // E3 minor-second clash
 
-      // Slow LFO modulating filter cutoff for tension
+      // Haunting high horror-string cluster (microtonal ghost screech shimmer)
+      const ghost1 = createDrone(1480.0, 'sine', 0.028, -14, 2400);
+      const ghost2 = createDrone(1568.0, 'sine', 0.024, 16, 2400);
+
+      // Cold hollow facility wind / dark corrupted static whisper
+      createFilteredNoiseLoop(640, 4.4, 0.055, 0.21, 290);
+
+      // Unsettling breathing filter sweep across sub + tritone pad
       const lfo = ctx.createOscillator();
       const lfoGain = ctx.createGain();
-      lfo.frequency.setValueAtTime(1.4, now);
-      lfoGain.gain.setValueAtTime(220, now);
+      lfo.frequency.setValueAtTime(1.65, now);
+      lfoGain.gain.setValueAtTime(240, now);
       lfo.connect(lfoGain);
-      lfoGain.connect(d1.filter.frequency);
+      lfoGain.connect(sub1.filter.frequency);
+      lfoGain.connect(tritone.filter.frequency);
+      lfoGain.connect(clash.filter.frequency);
       lfo.start(now);
-      this.ambienceNodes.push(lfo, lfoGain);
+
+      // Eerie trembling bow vibrato on high ghost harmonics
+      const ghostLfo = ctx.createOscillator();
+      const ghostGain = ctx.createGain();
+      ghostLfo.frequency.setValueAtTime(0.45, now);
+      ghostGain.gain.setValueAtTime(0.018, now);
+      ghostLfo.connect(ghostGain);
+      ghostGain.connect(ghost1.gain.gain);
+      ghostGain.connect(ghost2.gain.gain);
+      ghostLfo.start(now);
+
+      this.ambienceNodes.push(lfo, lfoGain, ghostLfo, ghostGain);
     } else if (mode === 'gameplay-thriller') {
       // Deep atmospheric sci-fi laboratory thriller drone
       const base = createDrone(48.99, 'sine', 0.2); // G1
@@ -327,7 +389,7 @@ class SoundEngine {
     this.playAlarmPulse();
     this.alarmInterval = window.setInterval(() => {
       this.playAlarmPulse();
-    }, 1500);
+    }, 1280);
   }
 
   public stopEmergencyAlarm() {
@@ -335,32 +397,288 @@ class SoundEngine {
       window.clearInterval(this.alarmInterval);
       this.alarmInterval = null;
     }
+    this.stopCinematicHorror();
   }
 
   private playAlarmPulse() {
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain || ctx.state !== 'running') return;
     const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(620, now);
-    osc.frequency.exponentialRampToValueAtTime(440, now + 0.55);
+
+    // Distorted dark bio-containment klaxon (dissonant dual-horn sweep + echoing facility slapback + sub thud)
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = this.getDistortionCurve(42);
+    shaper.oversample = '2x';
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(700, now);
-    filter.Q.setValueAtTime(3.5, now);
+    filter.frequency.setValueAtTime(640, now);
+    filter.frequency.exponentialRampToValueAtTime(340, now + 0.72);
+    filter.Q.setValueAtTime(2.6, now);
 
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    const mainGain = ctx.createGain();
+    mainGain.gain.setValueAtTime(0.001, now);
+    mainGain.gain.linearRampToValueAtTime(0.24, now + 0.05);
+    mainGain.gain.setValueAtTime(0.21, now + 0.36);
+    mainGain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
 
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start(now);
-    osc.stop(now + 0.65);
+    // Metallic hallway slapback echo
+    const delay = ctx.createDelay(0.6);
+    delay.delayTime.setValueAtTime(0.27, now);
+    const echoGain = ctx.createGain();
+    echoGain.gain.setValueAtTime(0.36, now);
+
+    const hornA = ctx.createOscillator();
+    const hornB = ctx.createOscillator();
+    hornA.type = 'sawtooth';
+    hornB.type = 'square';
+    hornA.frequency.setValueAtTime(515, now);
+    hornA.frequency.exponentialRampToValueAtTime(295, now + 0.72);
+    // Dissonant minor-second / tritone metallic grind
+    hornB.frequency.setValueAtTime(548, now);
+    hornB.frequency.exponentialRampToValueAtTime(314, now + 0.72);
+
+    hornA.connect(shaper);
+    hornB.connect(shaper);
+    shaper.connect(filter);
+    filter.connect(mainGain);
+    mainGain.connect(this.sfxGain);
+    mainGain.connect(delay);
+    delay.connect(echoGain);
+    echoGain.connect(this.sfxGain);
+
+    hornA.start(now);
+    hornB.start(now);
+    hornA.stop(now + 0.85);
+    hornB.stop(now + 0.85);
+
+    // Distant sub-bass facility warning thump under each klaxon wail
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(68, now);
+    sub.frequency.exponentialRampToValueAtTime(28, now + 0.42);
+    subGain.gain.setValueAtTime(0.26, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(now);
+    sub.stop(now + 0.48);
+  }
+
+  public playHorrorRiser(durationSec = 4.4) {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+
+    // 1. Rising dissonant Shepard-style horror string cluster building straight into breach impact
+    const startFreqs = [92.5, 130.81, 185.0, 261.63];
+    const endFreqs = [293.66, 415.3, 587.33, 830.61];
+    startFreqs.forEach((fStart, idx) => {
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(fStart, now);
+      osc.frequency.exponentialRampToValueAtTime(endFreqs[idx], now + durationSec);
+      osc.detune.setValueAtTime((idx - 1.5) * 14, now);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(220, now);
+      filter.frequency.exponentialRampToValueAtTime(2800, now + durationSec);
+      filter.Q.setValueAtTime(3.2, now);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.095, now + durationSec - 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + durationSec + 0.12);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain!);
+      osc.start(now);
+      osc.stop(now + durationSec + 0.16);
+      this.trackHorrorNode(osc, filter, gain);
+    });
+
+    // 2. Sweeping cold air/static horror swell
+    const len = Math.floor(ctx.sampleRate * (durationSec + 0.15));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(240, now);
+    bp.frequency.exponentialRampToValueAtTime(3100, now + durationSec);
+    bp.Q.setValueAtTime(2.8, now);
+    const nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.002, now);
+    nGain.gain.exponentialRampToValueAtTime(0.24, now + durationSec - 0.05);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + durationSec + 0.12);
+    noise.connect(bp);
+    bp.connect(nGain);
+    nGain.connect(this.sfxGain);
+    noise.start(now);
+    this.trackHorrorNode(noise, bp, nGain);
+
+    // 3. Accelerating ominous heartbeat thumps culminating right at failure
+    const beatOffsets = [0.6, 1.45, 2.2, 2.85, 3.4, 3.85, 4.18];
+    beatOffsets.forEach((sec) => {
+      if (sec >= durationSec) return;
+      const tid = window.setTimeout(() => {
+        this.playHeartbeatPulse();
+      }, Math.round(sec * 1000));
+      this.cinematicHorrorTimers.push(tid);
+    });
+  }
+
+  public playHorrorSystemFailure() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+
+    // 1. Catastrophic Sub-Bass Horror Braaam / Impact Drop
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = this.getDistortionCurve(55);
+
+    const braam1 = ctx.createOscillator();
+    const braam2 = ctx.createOscillator();
+    const braamFilter = ctx.createBiquadFilter();
+    const braamGain = ctx.createGain();
+    braam1.type = 'sawtooth';
+    braam2.type = 'sine';
+    braam1.frequency.setValueAtTime(98, now);
+    braam1.frequency.exponentialRampToValueAtTime(26, now + 2.3);
+    braam2.frequency.setValueAtTime(52, now);
+    braam2.frequency.exponentialRampToValueAtTime(22, now + 2.3);
+
+    braamFilter.type = 'lowpass';
+    braamFilter.frequency.setValueAtTime(680, now);
+    braamFilter.frequency.exponentialRampToValueAtTime(95, now + 2.2);
+
+    braamGain.gain.setValueAtTime(0.001, now);
+    braamGain.gain.linearRampToValueAtTime(0.52, now + 0.03);
+    braamGain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+
+    braam1.connect(shaper);
+    shaper.connect(braamFilter);
+    braam2.connect(braamFilter);
+    braamFilter.connect(braamGain);
+    braamGain.connect(this.sfxGain);
+    braam1.start(now);
+    braam2.start(now);
+    braam1.stop(now + 2.55);
+    braam2.stop(now + 2.55);
+    this.trackHorrorNode(braam1, braam2, shaper, braamFilter, braamGain);
+
+    // 2. Classic Cinema Waterphone / Metallic Horror Screech (Inharmonic FM synthesis)
+    const carrier = ctx.createOscillator();
+    const mod = ctx.createOscillator();
+    const modGain = ctx.createGain();
+    const screechFilter = ctx.createBiquadFilter();
+    const screechGain = ctx.createGain();
+
+    carrier.type = 'sine';
+    mod.type = 'sawtooth';
+    carrier.frequency.setValueAtTime(1180, now + 0.04);
+    carrier.frequency.exponentialRampToValueAtTime(640, now + 2.1);
+    mod.frequency.setValueAtTime(437, now + 0.04); // non-integer metallic ratio
+    mod.frequency.exponentialRampToValueAtTime(289, now + 2.1);
+    modGain.gain.setValueAtTime(520, now + 0.04);
+    modGain.gain.exponentialRampToValueAtTime(140, now + 2.1);
+
+    screechFilter.type = 'bandpass';
+    screechFilter.frequency.setValueAtTime(1650, now + 0.04);
+    screechFilter.Q.setValueAtTime(4.8, now + 0.04);
+
+    screechGain.gain.setValueAtTime(0.001, now);
+    screechGain.gain.linearRampToValueAtTime(0.24, now + 0.09);
+    screechGain.gain.exponentialRampToValueAtTime(0.001, now + 2.25);
+
+    mod.connect(modGain);
+    modGain.connect(carrier.frequency);
+    carrier.connect(screechFilter);
+    screechFilter.connect(screechGain);
+    screechGain.connect(this.sfxGain);
+    carrier.start(now + 0.03);
+    mod.start(now + 0.03);
+    carrier.stop(now + 2.3);
+    mod.stop(now + 2.3);
+    this.trackHorrorNode(carrier, mod, modGain, screechFilter, screechGain);
+
+    // 3. Corrupted System Static Tear + Electrical Arc Burst
+    const glitchDur = 1.15;
+    const len = Math.floor(ctx.sampleRate * glitchDur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const p = i / len;
+      const env = Math.pow(1 - p, 1.5);
+      // Stuttering corrupted digital tear bursts
+      const gate = Math.sin(p * Math.PI * 19) > -0.15 ? 1 : 0.1;
+      data[i] = (Math.random() * 2 - 1) * env * gate;
+    }
+    const glitchSrc = ctx.createBufferSource();
+    glitchSrc.buffer = buf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'bandpass';
+    hp.frequency.setValueAtTime(2400, now);
+    hp.frequency.exponentialRampToValueAtTime(780, now + glitchDur);
+    hp.Q.setValueAtTime(1.6, now);
+    const gGain = ctx.createGain();
+    gGain.gain.setValueAtTime(0.36, now);
+    gGain.gain.exponentialRampToValueAtTime(0.001, now + glitchDur);
+    glitchSrc.connect(hp);
+    hp.connect(gGain);
+    gGain.connect(this.sfxGain);
+    glitchSrc.start(now);
+    this.trackHorrorNode(glitchSrc, hp, gGain);
+
+    // 4. Facility Power Grid Dying Collapse
+    this.playPowerDown();
+  }
+
+  public playHorrorGlitchSting() {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+
+    // Eerie dissonant bowed-metal horror shriek (F#6 + G6 minor-second clash with fast eerie tremolo)
+    [1396.91, 1479.98, 698.46].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const trem = ctx.createOscillator();
+      const tremGain = ctx.createGain();
+
+      osc.type = idx === 2 ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.86, now + 1.35);
+
+      trem.frequency.setValueAtTime(14 + idx * 3, now);
+      tremGain.gain.setValueAtTime(0.045, now);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(idx === 2 ? 0.08 : 0.12, now + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.45);
+
+      trem.connect(tremGain);
+      tremGain.connect(gain.gain);
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+
+      osc.start(now);
+      trem.start(now);
+      osc.stop(now + 1.5);
+      trem.stop(now + 1.5);
+      this.trackHorrorNode(osc, gain, trem, tremGain);
+    });
+
+    // Distant haunted lab steel groan + electrical crackle
+    this.playDistantLabCreak();
+    this.playElectricalSpark();
   }
 
   public playElectricalSpark() {
@@ -422,20 +740,53 @@ class SoundEngine {
     if (!ctx || !this.sfxGain || ctx.state !== 'running') return;
     const now = ctx.currentTime;
 
-    // Sub impact
+    // Monumental subterranean steel slam sub-impact
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(110, now);
-    osc.frequency.exponentialRampToValueAtTime(32, now + 0.45);
-    gain.gain.setValueAtTime(0.45, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc.frequency.setValueAtTime(135, now);
+    osc.frequency.exponentialRampToValueAtTime(22, now + 0.95);
+    gain.gain.setValueAtTime(0.56, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.05);
     osc.connect(gain);
     gain.connect(this.sfxGain);
     osc.start(now);
-    osc.stop(now + 0.55);
+    osc.stop(now + 1.1);
 
-    // Metallic clank
+    // Metallic booming clang + echoing low-frequency cavern rumble
+    const len = Math.floor(ctx.sampleRate * 1.1);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.9);
+    }
+    const rumble = ctx.createBufferSource();
+    rumble.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(420, now);
+    lp.frequency.exponentialRampToValueAtTime(90, now + 1.05);
+    const rGain = ctx.createGain();
+    rGain.gain.setValueAtTime(0.42, now);
+    rGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    rumble.connect(lp);
+    lp.connect(rGain);
+    rGain.connect(this.sfxGain);
+    rumble.start(now);
+
+    // High metallic ring + spark
+    const ring = ctx.createOscillator();
+    const rRingGain = ctx.createGain();
+    ring.type = 'square';
+    ring.frequency.setValueAtTime(218, now);
+    ring.frequency.exponentialRampToValueAtTime(174, now + 0.65);
+    rRingGain.gain.setValueAtTime(0.11, now);
+    rRingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+    ring.connect(rRingGain);
+    rRingGain.connect(this.sfxGain);
+    ring.start(now);
+    ring.stop(now + 0.75);
+
     this.playElectricalSpark();
   }
 
