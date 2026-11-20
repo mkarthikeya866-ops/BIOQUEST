@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   BookOpen,
@@ -18,30 +18,41 @@ import {
   MultiSelectChallenge,
   MultipleChoiceChallenge,
   VaultDefinition,
+  VaultStationTab,
 } from '../types/game';
 import { MoleculeDiagram } from './MoleculeDiagram';
 import { soundEngine } from '../audio/soundEngine';
 
 interface VaultTerminalModalProps {
   vault: VaultDefinition;
+  initialTab?: VaultStationTab;
   alreadyCompleted: boolean;
   onCompleteVault: (vault: VaultDefinition) => void;
   onClose: () => void;
 }
 
-type TerminalTab = 'concepts' | 'challenges' | 'story';
-
 export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
   vault,
+  initialTab = 'challenges',
   alreadyCompleted,
   onCompleteVault,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<TerminalTab>('concepts');
+  const [activeTab, setActiveTab] = useState<VaultStationTab>(initialTab);
   const [challengeIdx, setChallengeIdx] = useState(0);
   const [showHint, setShowHint] = useState(false);
   const [feedback, setFeedback] = useState<{ status: 'correct' | 'incorrect'; text: string } | null>(null);
   const [vaultClearedNow, setVaultClearedNow] = useState(false);
+  const [powerSurgeActive, setPowerSurgeActive] = useState(false);
+  const surgeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (surgeTimerRef.current !== null) {
+        window.clearTimeout(surgeTimerRef.current);
+      }
+    };
+  }, []);
 
   // Per-challenge answer states
   const [selectedMc, setSelectedMc] = useState<string | null>(null);
@@ -49,6 +60,7 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
   const [matchAnswers, setMatchAnswers] = useState<Record<string, string>>({});
   const [classAnswers, setClassAnswers] = useState<Record<string, string>>({});
 
+  const isSecure = vaultClearedNow || alreadyCompleted;
   const currentChallenge = vault.challenges[challengeIdx];
 
   // Deterministically shuffle right-hand matching options per challenge
@@ -115,6 +127,15 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
       setChallengeIdx((i) => i + 1);
       resetChallengeInputs();
     } else {
+      soundEngine.playElectricalSpark();
+      setPowerSurgeActive(true);
+      if (surgeTimerRef.current !== null) {
+        window.clearTimeout(surgeTimerRef.current);
+      }
+      surgeTimerRef.current = window.setTimeout(() => {
+        setPowerSurgeActive(false);
+        surgeTimerRef.current = null;
+      }, 1180);
       setVaultClearedNow(true);
       onCompleteVault(vault);
     }
@@ -348,30 +369,86 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-2 sm:p-4 md:p-6">
-      <div className="max-w-4xl w-full max-h-[92dvh] bg-[#080f1e] border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-2xl">
+    <div
+      className={`fixed inset-0 z-40 flex items-center justify-center p-2 sm:p-4 md:p-6 transition-colors duration-700 ease-in-out ${
+        isSecure ? 'bg-[#02121b]/84' : 'bg-[#170d02]/84'
+      }`}
+    >
+      {/* Full-Viewport Screen-Space Power Surge Flicker Overlay (Warning Amber -> Voltage Surge -> Secure Cyan) */}
+      {powerSurgeActive && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-50 pointer-events-none overflow-hidden"
+        >
+          {/* Primary full-screen amber-to-cyan voltage flash & brownout flicker */}
+          <div className="absolute inset-0 animate-power-surge-overlay" />
+
+          {/* Subtle horizontal CRT interference scanlines across the viewport */}
+          <div className="absolute inset-0 opacity-35 power-surge-scanlines animate-power-surge-terminal" />
+
+          {/* Sweeping amber-to-cyan power surge band */}
+          <div className="absolute inset-x-0 top-0 h-28 animate-power-surge-scan bg-gradient-to-b from-transparent via-cyan-300/45 to-amber-300/20" />
+
+          {/* Screen-edge electrical border flash */}
+          <div className="absolute inset-0 shadow-[inset_0_0_95px_rgba(34,211,238,0.58)] animate-power-surge-overlay" />
+        </div>
+      )}
+
+      <div
+        className={`relative max-w-4xl w-full max-h-[92dvh] rounded-xl overflow-hidden flex flex-col border transition-all duration-700 ease-in-out ${
+          isSecure
+            ? 'bg-[#051a26] border-cyan-400/75 shadow-[0_0_55px_rgba(34,211,238,0.28)]'
+            : 'bg-[#1b1105] border-amber-500/65 shadow-[0_0_55px_rgba(245,158,11,0.24)]'
+        } ${powerSurgeActive ? 'animate-power-surge-terminal' : ''}`}
+      >
+        {/* Cross-fading Atmospheric Interface Background Wash: Warning Amber -> Secure Cyan */}
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ease-in-out bg-[radial-gradient(ellipse_at_top,_rgba(245,158,11,0.24)_0%,_rgba(120,53,15,0.12)_48%,_transparent_80%)] ${
+            isSecure ? 'opacity-0' : 'opacity-100'
+          }`}
+        />
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ease-in-out bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.24)_0%,_rgba(8,145,178,0.12)_48%,_transparent_80%)] ${
+            isSecure ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+
         {/* Header */}
-        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-[#0c1629] border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+        <div
+          className={`relative z-10 px-4 py-3 sm:px-6 sm:py-4 border-b flex items-center justify-between gap-3 shrink-0 transition-colors duration-700 ease-in-out ${
+            isSecure
+              ? 'bg-[#072434]/95 border-cyan-400/45'
+              : 'bg-[#261707]/95 border-amber-500/40'
+          }`}
+        >
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] sm:text-xs font-mono-data text-cyan-400">
+            <div
+              className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] sm:text-xs font-mono-data transition-colors duration-700 ${
+                isSecure ? 'text-cyan-300' : 'text-amber-300'
+              }`}
+            >
               <span>{vault.code}</span>
               <span aria-hidden="true">·</span>
               <span>{vault.difficulty}</span>
               <span className="hidden sm:inline" aria-hidden="true">·</span>
-              <span className="hidden sm:inline text-slate-400">{vault.wing}</span>
-              {alreadyCompleted && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-emerald-400">KEY COLLECTED</span>
-                </>
-              )}
+              <span className="hidden sm:inline text-slate-300/80">{vault.wing}</span>
+              <span aria-hidden="true">·</span>
+              <span
+                className={`font-semibold tracking-wider transition-colors duration-700 ${
+                  isSecure ? 'text-cyan-300' : 'text-amber-400'
+                }`}
+              >
+                {isSecure ? 'SECURE · VERIFIED' : 'WARNING · LOCKED TERMINAL'}
+              </span>
             </div>
             <h2 className="font-display text-lg sm:text-2xl font-bold text-white mt-0.5 truncate">{vault.title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            className="p-2 text-slate-300 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             aria-label="Close vault terminal"
           >
             <X className="w-5 h-5" />
@@ -380,7 +457,13 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
 
         {/* Navigation Tabs */}
         {!vaultClearedNow && (
-          <div className="px-3 sm:px-6 py-2 bg-[#091224] border-b border-slate-800 flex items-center justify-between gap-3 shrink-0 overflow-x-auto">
+          <div
+            className={`relative z-10 px-3 sm:px-6 py-2 border-b flex items-center justify-between gap-3 shrink-0 overflow-x-auto transition-colors duration-700 ease-in-out ${
+              isSecure
+                ? 'bg-[#061d2b]/90 border-cyan-500/30'
+                : 'bg-[#1e1206]/90 border-amber-500/30'
+            }`}
+          >
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -388,10 +471,12 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('concepts');
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors duration-500 cursor-pointer whitespace-nowrap ${
                   activeTab === 'concepts'
-                    ? 'bg-cyan-400 text-slate-950'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? isSecure
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-amber-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
@@ -403,10 +488,12 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('challenges');
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors duration-500 cursor-pointer whitespace-nowrap ${
                   activeTab === 'challenges'
-                    ? 'bg-cyan-400 text-slate-950'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? isSecure
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-amber-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <FlaskConical className="w-3.5 h-3.5" />
@@ -420,10 +507,12 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                   soundEngine.playButtonClick();
                   setActiveTab('story');
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-colors duration-500 cursor-pointer whitespace-nowrap ${
                   activeTab === 'story'
-                    ? 'bg-amber-400 text-slate-950'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? isSecure
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-amber-400 text-slate-950'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <FileWarning className="w-3.5 h-3.5" />
@@ -431,39 +520,43 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
               </button>
             </div>
 
-            <span className="hidden md:inline text-xs font-mono-data text-slate-400 whitespace-nowrap">
+            <span
+              className={`hidden md:inline text-xs font-mono-data whitespace-nowrap transition-colors duration-700 ${
+                isSecure ? 'text-cyan-300' : 'text-amber-200/80'
+              }`}
+            >
               Reward: {vault.keyName}
             </span>
           </div>
         )}
 
         {/* Main Scrollable Workspace */}
-        <div className="flex-1 overflow-y-auto terminal-scroll p-4 sm:p-6">
+        <div className="relative z-10 flex-1 overflow-y-auto terminal-scroll p-4 sm:p-6">
           {vaultClearedNow ? (
-            /* KEY COLLECTION CELEBRATION */
+            /* KEY COLLECTION CELEBRATION — SECURE CYAN STATE */
             <div className="max-w-xl mx-auto text-center py-6 space-y-6 animate-cinema-in">
-              <div className="w-20 h-20 rounded-full bg-emerald-950/70 border-2 border-emerald-400 flex items-center justify-center mx-auto">
-                <KeyRound className="w-10 h-10 text-emerald-300" />
+              <div className="w-20 h-20 rounded-full bg-cyan-950/80 border-2 border-cyan-400 shadow-[0_0_28px_rgba(34,211,238,0.4)] flex items-center justify-center mx-auto">
+                <KeyRound className="w-10 h-10 text-cyan-300" />
               </div>
               <div>
-                <p className="font-mono-data text-xs tracking-widest text-emerald-400 mb-1">
-                  AUTHENTICATION KEY RECOVERED
+                <p className="font-mono-data text-xs tracking-widest text-cyan-300 mb-1">
+                  TERMINAL SECURED · AUTHENTICATION KEY RECOVERED
                 </p>
                 <h3 className="font-display text-3xl font-bold text-white">
                   {vault.keyName} Acquired
                 </h3>
-                <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+                <p className="text-sm text-cyan-50/90 mt-2 leading-relaxed">
                   {vault.nexusCompletion}
                 </p>
               </div>
 
-              <div className="bg-[#060b16] border border-amber-500/35 rounded-lg p-5 text-left">
-                <div className="flex items-center gap-2 text-xs font-mono-data text-amber-400 mb-2">
+              <div className="bg-[#04141f]/90 border border-cyan-400/45 rounded-lg p-5 text-left">
+                <div className="flex items-center gap-2 text-xs font-mono-data text-cyan-300 mb-2">
                   <FileWarning className="w-4 h-4" />
                   <span>STORY CLUE UNCOVERED · {vault.storyLog.code}</span>
                 </div>
                 <p className="text-sm font-semibold text-white mb-2">{vault.storyLog.title}</p>
-                <div className="space-y-2 text-xs font-mono-data text-slate-300 leading-relaxed">
+                <div className="space-y-2 text-xs font-mono-data text-slate-200 leading-relaxed">
                   {vault.storyLog.body.map((line, i) => (
                     <p key={i}>{line}</p>
                   ))}
@@ -480,7 +573,7 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                     resetChallengeInputs();
                     setActiveTab('challenges');
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-slate-200 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-cyan-100 bg-cyan-950/60 border border-cyan-500/45 hover:border-cyan-300 rounded transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>Replay Challenges</span>
@@ -488,9 +581,9 @@ export const VaultTerminalModal: React.FC<VaultTerminalModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2.5 text-sm font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded transition-colors cursor-pointer"
+                  className="px-6 py-2.5 text-sm font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded shadow-[0_0_20px_rgba(34,211,238,0.35)] transition-colors cursor-pointer"
                 >
-                  Return to 3D Laboratory
+                  Return to {vault.code} Chamber
                 </button>
               </div>
             </div>

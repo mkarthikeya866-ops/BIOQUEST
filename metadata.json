@@ -2,5 +2,5 @@
   "name": "BIOQUEST — The Blackout Protocol",
   "description": "A cinematic futuristic biotechnology educational thriller in first-person 3D with five scientific research vaults and an interactive molecular discovery mystery.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

@@ -118,19 +118,43 @@ export interface VaultDefinition {
   worldPosition: { x: number; z: number };
 }
 
+export type VaultStationTab = 'concepts' | 'challenges' | 'story';
+
 export interface InteractableTarget {
   id: string;
-  kind: 'vault' | 'nexus' | 'exit' | 'monument';
+  kind:
+    | 'vault'
+    | 'vault-station'
+    | 'vault-exit'
+    | 'nexus'
+    | 'exit'
+    | 'monument'
+    | 'vehicle'
+    | 'lift'
+    | 'tv'
+    | 'evidence';
   label: string;
   sublabel: string;
   vaultId?: VaultId;
+  stationTab?: VaultStationTab;
   locked?: boolean;
+  entityId?: string;
+}
+
+export interface VehicleHudState {
+  active: boolean;
+  name: string;
+  kind: 'car' | 'bike';
+  speedKmh: number;
+  boosting: boolean;
 }
 
 export interface SavedProgress {
   completedVaults: VaultId[];
+  visitedVaults: VaultId[];
   collectedKeys: VaultId[];
   placedKeys: VaultId[];
+  collectedEvidence: string[];
   mainDoorOpen: boolean;
   enteredModernWorld: boolean;
   facilityRestored: boolean;
@@ -142,3 +166,4 @@ export interface NexusMessage {
   text: string;
   tone?: 'info' | 'warning' | 'success';
 }
+

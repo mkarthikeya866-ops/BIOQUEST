@@ -1,6 +1,20 @@
-import { AudioSettings } from '../types/game';
+import { AudioSettings, VaultId } from '../types/game';
 
-export type AmbienceMode = 'off' | 'lab-calm' | 'alert-tension' | 'gameplay-thriller' | 'victory';
+export type AmbienceMode =
+  | 'off'
+  | 'lab-calm'
+  | 'alert-tension'
+  | 'gameplay-thriller'
+  | 'victory'
+  | 'vault-1'
+  | 'vault-2'
+  | 'vault-3'
+  | 'vault-4'
+  | 'vault-5';
+
+export function getVaultAmbienceMode(vaultId: VaultId): AmbienceMode {
+  return `vault-${vaultId}` as AmbienceMode;
+}
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -108,7 +122,13 @@ class SoundEngine {
     this.ambienceMode = mode;
     const now = ctx.currentTime;
 
-    const createDrone = (freq: number, type: OscillatorType, gainVal: number, detune = 0) => {
+    const createDrone = (
+      freq: number,
+      type: OscillatorType,
+      gainVal: number,
+      detune = 0,
+      cutoff = mode === 'victory' ? 950 : 420
+    ) => {
       const osc = ctx.createOscillator();
       const filter = ctx.createBiquadFilter();
       const gain = ctx.createGain();
@@ -116,15 +136,56 @@ class SoundEngine {
       osc.frequency.setValueAtTime(freq, now);
       osc.detune.setValueAtTime(detune, now);
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(mode === 'victory' ? 950 : 420, now);
+      filter.frequency.setValueAtTime(cutoff, now);
       gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(gainVal, now + 1.2);
+      gain.gain.linearRampToValueAtTime(gainVal, now + 1.1);
       osc.connect(filter);
       filter.connect(gain);
       gain.connect(this.musicGain!);
       osc.start(now);
       this.ambienceNodes.push(osc, filter, gain);
       return { osc, filter, gain };
+    };
+
+    const createFilteredNoiseLoop = (
+      centerFreq: number,
+      q: number,
+      gainVal: number,
+      lfoHz = 0.25,
+      lfoDepth = 85
+    ) => {
+      const length = Math.floor(ctx.sampleRate * 2.5);
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(centerFreq, now);
+      filter.Q.setValueAtTime(q, now);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(gainVal, now + 1.1);
+
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.frequency.setValueAtTime(lfoHz, now);
+      lfoGain.gain.setValueAtTime(lfoDepth, now);
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.musicGain!);
+      src.start(now);
+      lfo.start(now);
+      this.ambienceNodes.push(src, filter, gain, lfo, lfoGain);
     };
 
     if (mode === 'lab-calm') {
@@ -170,6 +231,94 @@ class SoundEngine {
       createDrone(196.0, 'triangle', 0.07);
       createDrone(246.94, 'sine', 0.05);
       createDrone(293.66, 'sine', 0.04);
+    } else if (mode === 'vault-1') {
+      // VAULT 01 (Biological Activity & IC50 Containment): Deep biological rumble + slow organic breathing pulse
+      const sub = createDrone(41.2, 'sine', 0.28, 0, 190); // E1 deep containment rumble
+      createDrone(42.8, 'sine', 0.14, 0, 180); // subtle 1.6Hz acoustic beat
+      const body = createDrone(82.41, 'triangle', 0.1, -4, 240); // E2 warm biological tank hum
+      createDrone(123.47, 'sine', 0.045, 3, 280); // B2 low fifth
+
+      const breathLfo = ctx.createOscillator();
+      const breathGain = ctx.createGain();
+      breathLfo.frequency.setValueAtTime(0.28, now);
+      breathGain.gain.setValueAtTime(95, now);
+      breathLfo.connect(breathGain);
+      breathGain.connect(body.filter.frequency);
+      breathGain.connect(sub.filter.frequency);
+      breathLfo.start(now);
+      this.ambienceNodes.push(breathLfo, breathGain);
+    } else if (mode === 'vault-2') {
+      // VAULT 02 (Chemical Structure & SMILES Synthesis): Crystalline spectroscopic mid-high harmonic shimmer
+      createDrone(110.0, 'sine', 0.14, 0, 620); // A2 clean bench foundation
+      createDrone(220.0, 'triangle', 0.075, 5, 950); // A3 molecular glass hum
+      const shimmer1 = createDrone(659.25, 'sine', 0.036, -4, 1600); // E5 crystalline resonance
+      const shimmer2 = createDrone(880.0, 'sine', 0.024, 6, 1800); // A5 spectral overtone
+
+      const shimmerLfo = ctx.createOscillator();
+      const shimmerGain = ctx.createGain();
+      shimmerLfo.frequency.setValueAtTime(0.52, now);
+      shimmerGain.gain.setValueAtTime(0.015, now);
+      shimmerLfo.connect(shimmerGain);
+      shimmerGain.connect(shimmer1.gain.gain);
+      shimmerGain.connect(shimmer2.gain.gain);
+      shimmerLfo.start(now);
+      this.ambienceNodes.push(shimmerLfo, shimmerGain);
+    } else if (mode === 'vault-3') {
+      // VAULT 03 (Drug-Likeness & Membrane Permeation): Pressurized laminar-flow filtration + resonant fluidic drone
+      const tank = createDrone(55.0, 'sine', 0.22, 0, 260); // A1 fluidic chamber resonance
+      createDrone(110.0, 'sine', 0.085, -3, 380); // A2
+      createDrone(164.81, 'triangle', 0.045, 4, 480); // E3
+      createFilteredNoiseLoop(440, 2.8, 0.042, 0.22, 130); // sterile pressurized airflow whisper
+
+      const flowLfo = ctx.createOscillator();
+      const flowGain = ctx.createGain();
+      flowLfo.frequency.setValueAtTime(0.32, now);
+      flowGain.gain.setValueAtTime(110, now);
+      flowLfo.connect(flowGain);
+      flowGain.connect(tank.filter.frequency);
+      flowLfo.start(now);
+      this.ambienceNodes.push(flowLfo, flowGain);
+    } else if (mode === 'vault-4') {
+      // VAULT 04 (Machine Learning & XGBoost AI Core): High-frequency technological server hum + neural data pulse
+      const rack = createDrone(146.83, 'sawtooth', 0.075, 0, 740); // D3 compute rack hum
+      createDrone(293.66, 'triangle', 0.065, -3, 1200); // D4 digital bus
+      const hiHum1 = createDrone(587.33, 'sine', 0.04, 4, 2100); // D5 high-freq technological hum
+      createDrone(1174.66, 'sine', 0.022, -6, 2600); // D6 precision clock whine
+      createFilteredNoiseLoop(1650, 3.6, 0.018, 1.4, 220); // subtle server cooling fan air
+
+      const pulseLfo = ctx.createOscillator();
+      const pulseGain = ctx.createGain();
+      pulseLfo.frequency.setValueAtTime(2.6, now);
+      pulseGain.gain.setValueAtTime(240, now);
+      pulseLfo.connect(pulseGain);
+      pulseGain.connect(rack.filter.frequency);
+      pulseGain.connect(hiHum1.filter.frequency);
+      pulseLfo.start(now);
+      this.ambienceNodes.push(pulseLfo, pulseGain);
+    } else if (mode === 'vault-5') {
+      // VAULT 05 (Master Containment Core): Monumental deep reactor rumble + high superconducting ring resonance
+      const coreSub = createDrone(36.71, 'sine', 0.29, 0, 175); // D1 deep containment foundation
+      const coreMid = createDrone(73.42, 'sawtooth', 0.085, 5, 230); // D2 heavy magnetic coil
+      const ringHi1 = createDrone(440.0, 'sine', 0.036, -7, 1600); // A4 superconducting ring
+      createDrone(880.0, 'sine', 0.024, 7, 2200); // A5 harmonic ring shimmer
+
+      const reactorLfo = ctx.createOscillator();
+      const reactorGain = ctx.createGain();
+      reactorLfo.frequency.setValueAtTime(0.16, now);
+      reactorGain.gain.setValueAtTime(125, now);
+      reactorLfo.connect(reactorGain);
+      reactorGain.connect(coreSub.filter.frequency);
+      reactorGain.connect(coreMid.filter.frequency);
+      reactorLfo.start(now);
+
+      const ringLfo = ctx.createOscillator();
+      const ringGain = ctx.createGain();
+      ringLfo.frequency.setValueAtTime(1.15, now);
+      ringGain.gain.setValueAtTime(0.012, now);
+      ringLfo.connect(ringGain);
+      ringGain.connect(ringHi1.gain.gain);
+      ringLfo.start(now);
+      this.ambienceNodes.push(reactorLfo, reactorGain, ringLfo, ringGain);
     }
   }
 

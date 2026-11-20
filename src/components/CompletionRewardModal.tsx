@@ -119,32 +119,34 @@ export const CompletionRewardModal: React.FC<CompletionRewardModalProps> = ({
 
           {/* Footer Actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onReplayIntro}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-300 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Replay Intro</span>
-              </button>
+            <button
+              type="button"
+              onClick={onReplayIntro}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium text-slate-300 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Replay Intro</span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={onResetProgress}
-                className="text-xs text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded transition-colors cursor-pointer shadow-[0_0_18px_rgba(34,211,238,0.28)]"
               >
-                Reset Progress
+                <RotateCcw className="w-4 h-4" />
+                <span>Restart Game</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onExploreRestored}
+                className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded transition-colors cursor-pointer"
+              >
+                <Compass className="w-4 h-4" />
+                <span>Explore the Modern World</span>
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={onExploreRestored}
-              className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded transition-colors cursor-pointer"
-            >
-              <Compass className="w-4 h-4" />
-              <span>Explore the Modern World</span>
-            </button>
           </div>
         </div>
       </div>

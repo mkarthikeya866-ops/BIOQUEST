@@ -1,41 +1,50 @@
 import * as THREE from 'three';
+import { VaultId } from '../types/game';
+import { VAULTS } from '../data/vaultData';
 
 export interface FacilityTextures {
   floor: THREE.CanvasTexture;
   wall: THREE.CanvasTexture;
-  plazaGround: THREE.CanvasTexture;
   monitorNormal: THREE.CanvasTexture;
-  monitorGlitch: THREE.CanvasTexture;
+  monitorAlert: THREE.CanvasTexture;
+  drugRecordNormal: THREE.CanvasTexture;
+  drugTransferAttempt: THREE.CanvasTexture;
+  securityBreachAlert: THREE.CanvasTexture;
+  breachPadlockDisplay: THREE.CanvasTexture;
+  molecularWallScreen: THREE.CanvasTexture;
+  biometricScanDisplay: THREE.CanvasTexture;
+  bioquestHexDisplay: THREE.CanvasTexture;
+  holoPadDisplay: THREE.CanvasTexture;
+  drugStorageDisplay: THREE.CanvasTexture;
+  aiMonitorWall: THREE.CanvasTexture;
+  archiveWallDisplay: THREE.CanvasTexture;
   exitLocked: THREE.CanvasTexture;
   exitRestored: THREE.CanvasTexture;
-  chemicalSpillGreen: THREE.CanvasTexture;
-  chemicalSpillAmber: THREE.CanvasTexture;
-  bloodDragTrail: THREE.CanvasTexture;
-  fingerprintsOverlay: THREE.CanvasTexture;
-  specimenWarning: THREE.CanvasTexture;
-  fogSprite: THREE.CanvasTexture;
-  horrorWallScrawls: THREE.CanvasTexture[];
-  vaultSigns: Map<number, THREE.CanvasTexture>;
-  dispose: () => void;
+  plazaGround: THREE.CanvasTexture;
+  cityRoad: THREE.CanvasTexture;
+  citySidewalk: THREE.CanvasTexture;
+  vaultSigns: Map<VaultId, THREE.CanvasTexture>;
+  disposeAll: () => void;
 }
 
-function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d')!;
-  return [canvas, ctx];
-}
-
-function configureTexture(
-  canvas: HTMLCanvasElement,
+function makeCanvasTexture(
+  width: number,
+  height: number,
+  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
   anisotropy: number,
   repeatX = 1,
   repeatY = 1
 ): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    draw(ctx, width, height);
+  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(8, anisotropy);
+  tex.anisotropy = anisotropy;
   if (repeatX !== 1 || repeatY !== 1) {
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
@@ -46,440 +55,968 @@ function configureTexture(
 }
 
 export function createFacilityTextures(maxAnisotropy: number): FacilityTextures {
-  const allTextures: THREE.CanvasTexture[] = [];
-
-  // 1. Grungy, Corroded, Blood-Stained Dark Horror Lab Floor Tiles
-  const [fCanvas, fCtx] = makeCanvas(512, 512);
-  fCtx.fillStyle = '#07090d';
-  fCtx.fillRect(0, 0, 512, 512);
-  // Dark grime & oil mottling across concrete/steel panels
-  for (let i = 0; i < 42; i++) {
-    const gx = (i * 97) % 512;
-    const gy = (i * 173) % 512;
-    const gr = 28 + (i % 5) * 18;
-    const g = fCtx.createRadialGradient(gx, gy, 2, gx, gy, gr);
-    g.addColorStop(0, i % 4 === 0 ? 'rgba(65, 12, 12, 0.28)' : 'rgba(18, 22, 26, 0.42)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    fCtx.fillStyle = g;
-    fCtx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
-  }
-  // Rusted metallic floor panel seams
-  fCtx.strokeStyle = '#1b1718';
-  fCtx.lineWidth = 4;
-  fCtx.strokeRect(4, 4, 248, 248);
-  fCtx.strokeRect(260, 4, 248, 248);
-  fCtx.strokeRect(4, 260, 248, 248);
-  fCtx.strokeRect(260, 260, 248, 248);
-  // Jagged floor cracks
-  fCtx.strokeStyle = '#020305';
-  fCtx.lineWidth = 2.5;
-  fCtx.beginPath();
-  fCtx.moveTo(42, 18);
-  fCtx.lineTo(88, 92);
-  fCtx.lineTo(132, 118);
-  fCtx.lineTo(185, 205);
-  fCtx.moveTo(310, 290);
-  fCtx.lineTo(368, 355);
-  fCtx.lineTo(445, 392);
-  fCtx.stroke();
-  // Dried crimson splatter dots & scuff marks
-  fCtx.fillStyle = 'rgba(110, 14, 14, 0.45)';
-  for (const [bx, by, br] of [
-    [118, 124, 14],
-    [136, 134, 6],
-    [380, 340, 11],
-    [396, 362, 5],
-    [220, 420, 8],
-  ]) {
-    fCtx.beginPath();
-    fCtx.arc(bx, by, br, 0, Math.PI * 2);
-    fCtx.fill();
-  }
-  const floor = configureTexture(fCanvas, maxAnisotropy, 12, 10);
-  allTextures.push(floor);
-
-  // 2. Weathered, Rust-Streaked Dark Containment Wall Panels
-  const [wCanvas, wCtx] = makeCanvas(512, 512);
-  wCtx.fillStyle = '#0a0c12';
-  wCtx.fillRect(0, 0, 512, 512);
-  wCtx.fillStyle = '#0e1118';
-  wCtx.fillRect(10, 12, 492, 228);
-  wCtx.fillRect(10, 270, 492, 230);
-  // Vertical leaking grime & rust streaks dripping downward
-  for (let i = 0; i < 18; i++) {
-    const sx = 24 + ((i * 67) % 468);
-    const len = 90 + (i % 4) * 70;
-    const grad = wCtx.createLinearGradient(sx, 12, sx, 12 + len);
-    grad.addColorStop(0, i % 3 === 0 ? 'rgba(95, 16, 16, 0.55)' : 'rgba(20, 26, 14, 0.52)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    wCtx.fillStyle = grad;
-    wCtx.fillRect(sx, 12, 6 + (i % 5) * 3, len);
-  }
-  wCtx.strokeStyle = '#040508';
-  wCtx.lineWidth = 5;
-  wCtx.strokeRect(10, 12, 492, 228);
-  wCtx.strokeRect(10, 270, 492, 230);
-  // Weathered dark crimson bio-hazard trim band
-  wCtx.fillStyle = '#5c1116';
-  wCtx.fillRect(0, 246, 512, 10);
-  wCtx.fillStyle = '#1f0709';
-  for (let x = 0; x < 512; x += 36) {
-    wCtx.fillRect(x, 246, 14, 10);
-  }
-  const wall = configureTexture(wCanvas, maxAnisotropy, 8, 1);
-  allTextures.push(wall);
-
-  // 3. Normal Operational Molecular Monitor
-  const [mCanvas, mCtx] = makeCanvas(512, 320);
-  mCtx.fillStyle = '#071324';
-  mCtx.fillRect(0, 0, 512, 320);
-  mCtx.strokeStyle = '#0891b2';
-  mCtx.lineWidth = 3;
-  mCtx.strokeRect(12, 12, 488, 296);
-  mCtx.fillStyle = '#22d3ee';
-  mCtx.font = 'bold 20px monospace';
-  mCtx.fillText('BIOQUEST RESEARCH WORKSTATION', 28, 46);
-  mCtx.fillStyle = '#67e8f9';
-  mCtx.font = '14px monospace';
-  mCtx.fillText('TARGET: EGFR / COX-2   ASSAY: IC50 SCREEN', 28, 74);
-  mCtx.fillText('SMILES: Cc1ccc(NC(=O)c2ccccc2)cc1', 28, 100);
-  mCtx.strokeStyle = '#22d3ee';
-  mCtx.lineWidth = 3;
-  mCtx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 3) * i - Math.PI / 6;
-    const x = 130 + Math.cos(a) * 46;
-    const y = 200 + Math.sin(a) * 46;
-    if (i === 0) mCtx.moveTo(x, y);
-    else mCtx.lineTo(x, y);
-  }
-  mCtx.closePath();
-  mCtx.stroke();
-  mCtx.fillStyle = '#0ea5e9';
-  const heights = [62, 108, 84, 130, 96, 118];
-  heights.forEach((h, idx) => {
-    mCtx.fillRect(250 + idx * 36, 260 - h, 22, h);
-  });
-  mCtx.fillStyle = '#10b981';
-  mCtx.font = 'bold 15px monospace';
-  mCtx.fillText('SYSTEM NOMINAL — ARCHIVE SYNC ACTIVE', 28, 290);
-  const monitorNormal = configureTexture(mCanvas, maxAnisotropy);
-  allTextures.push(monitorNormal);
-
-  // 4. Glitched Critical Horror Monitor
-  const [gCanvas, gCtx] = makeCanvas(512, 320);
-  gCtx.fillStyle = '#170306';
-  gCtx.fillRect(0, 0, 512, 320);
-  gCtx.fillStyle = '#450a0a';
-  gCtx.fillRect(0, 42, 512, 26);
-  gCtx.fillRect(0, 136, 512, 34);
-  gCtx.fillRect(0, 240, 512, 22);
-  gCtx.strokeStyle = '#dc2626';
-  gCtx.lineWidth = 5;
-  gCtx.strokeRect(10, 10, 492, 300);
-  gCtx.fillStyle = '#ef4444';
-  gCtx.font = 'bold 28px monospace';
-  gCtx.fillText('CONTAINMENT BREACH 2045', 46, 108);
-  gCtx.fillStyle = '#fca5a5';
-  gCtx.font = 'bold 20px monospace';
-  gCtx.fillText('BIO-HAZARD LEVEL 5 · LOCKDOWN', 66, 152);
-  gCtx.fillStyle = '#f87171';
-  gCtx.font = '15px monospace';
-  gCtx.fillText('ERR: SPECIMEN ESCAPE // TOXIC LEAK', 84, 206);
-  gCtx.fillText('RECOVER ALL 5 VAULT KEYS TO ESCAPE', 84, 238);
-  const monitorGlitch = configureTexture(gCanvas, maxAnisotropy);
-  allTextures.push(monitorGlitch);
-
-  // 5. Main Door Locked Screen (Place 5 Keys)
-  const [eCanvas, eCtx] = makeCanvas(512, 256);
-  eCtx.fillStyle = '#180306';
-  eCtx.fillRect(0, 0, 512, 256);
-  eCtx.strokeStyle = '#dc2626';
-  eCtx.lineWidth = 6;
-  eCtx.strokeRect(12, 12, 488, 232);
-  eCtx.fillStyle = '#ef4444';
-  eCtx.font = 'bold 34px monospace';
-  eCtx.textAlign = 'center';
-  eCtx.fillText('MAIN GATE SEALED', 256, 86);
-  eCtx.fillStyle = '#fca5a5';
-  eCtx.font = 'bold 22px monospace';
-  eCtx.fillText('PLACE ALL 5 KEYS AT CONSOLE', 256, 138);
-  eCtx.fillStyle = '#f87171';
-  eCtx.font = '16px monospace';
-  eCtx.fillText('QUARANTINE PROTOCOL 2045 · NO EXIT', 256, 194);
-  const exitLocked = configureTexture(eCanvas, maxAnisotropy);
-  allTextures.push(exitLocked);
-
-  // 6. Main Door Open / Restored Screen
-  const [rCanvas, rCtx] = makeCanvas(512, 256);
-  rCtx.fillStyle = '#05221a';
-  rCtx.fillRect(0, 0, 512, 256);
-  rCtx.strokeStyle = '#10b981';
-  rCtx.lineWidth = 6;
-  rCtx.strokeRect(12, 12, 488, 232);
-  rCtx.fillStyle = '#34d399';
-  rCtx.font = 'bold 34px monospace';
-  rCtx.textAlign = 'center';
-  rCtx.fillText('MAIN GATE OPEN', 256, 86);
-  rCtx.fillStyle = '#a7f3d0';
-  rCtx.font = 'bold 22px monospace';
-  rCtx.fillText('ALL 5 KEYS VERIFIED', 256, 138);
-  rCtx.fillStyle = '#6ee7b7';
-  rCtx.font = '16px monospace';
-  rCtx.fillText('WALK THROUGH TO THE MODERN WORLD', 256, 194);
-  const exitRestored = configureTexture(rCanvas, maxAnisotropy);
-  allTextures.push(exitRestored);
-
-  // 6b. Modern World Architectural Plaza Tiles
-  const [pCanvas, pCtx] = makeCanvas(512, 512);
-  pCtx.fillStyle = '#d7e3ee';
-  pCtx.fillRect(0, 0, 512, 512);
-  pCtx.fillStyle = '#cbd8e6';
-  pCtx.fillRect(6, 6, 244, 244);
-  pCtx.fillRect(262, 262, 244, 244);
-  pCtx.strokeStyle = '#94a3b8';
-  pCtx.lineWidth = 3;
-  pCtx.strokeRect(4, 4, 248, 248);
-  pCtx.strokeRect(260, 4, 248, 248);
-  pCtx.strokeRect(4, 260, 248, 248);
-  pCtx.strokeRect(260, 260, 248, 248);
-  pCtx.fillStyle = '#38bdf8';
-  pCtx.fillRect(250, 0, 12, 512);
-  pCtx.fillRect(0, 250, 512, 12);
-  const plazaGround = configureTexture(pCanvas, maxAnisotropy, 18, 18);
-  allTextures.push(plazaGround);
-
-  // 6c. Toxic Chemical Spill Puddles (Glowing Acidic Green & Corrosive Blood-Amber)
-  const makeSpillTexture = (coreHex: string, midHex: string, edgeHex: string) => {
-    const [sCanvas, sCtx] = makeCanvas(256, 256);
-    sCtx.clearRect(0, 0, 256, 256);
-    const drawBlob = (cx: number, cy: number, r: number, alpha: number) => {
-      const grad = sCtx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
-      grad.addColorStop(0, coreHex);
-      grad.addColorStop(0.55, midHex);
-      grad.addColorStop(1, edgeHex);
-      sCtx.globalAlpha = alpha;
-      sCtx.fillStyle = grad;
-      sCtx.beginPath();
-      sCtx.arc(cx, cy, r, 0, Math.PI * 2);
-      sCtx.fill();
-    };
-    drawBlob(128, 128, 92, 0.95);
-    drawBlob(78, 98, 52, 0.88);
-    drawBlob(176, 148, 56, 0.86);
-    drawBlob(148, 76, 40, 0.82);
-    drawBlob(70, 170, 34, 0.78);
-    sCtx.globalAlpha = 0.72;
-    sCtx.strokeStyle = '#ffffff';
-    sCtx.lineWidth = 1.6;
-    for (const [bx, by, br] of [
-      [115, 118, 7],
-      [148, 134, 4.5],
-      [96, 142, 5.5],
-      [162, 108, 4],
-    ]) {
-      sCtx.beginPath();
-      sCtx.arc(bx, by, br, 0, Math.PI * 2);
-      sCtx.stroke();
-    }
-    const tex = configureTexture(sCanvas, maxAnisotropy);
-    allTextures.push(tex);
-    return tex;
+  const created: THREE.CanvasTexture[] = [];
+  const register = (t: THREE.CanvasTexture) => {
+    created.push(t);
+    return t;
   };
 
-  const chemicalSpillGreen = makeSpillTexture('#a3e635', '#3f6212', 'rgba(20, 83, 45, 0)');
-  const chemicalSpillAmber = makeSpillTexture('#dc2626', '#7f1d1d', 'rgba(45, 5, 5, 0)');
+  // 1. High-Gloss Dark-Navy Composite Laboratory Deck (Ref Image 1 & 2)
+  const floor = register(
+    makeCanvasTexture(
+      512,
+      512,
+      (ctx, w, h) => {
+        const bg = ctx.createLinearGradient(0, 0, w, h);
+        bg.addColorStop(0, '#071022');
+        bg.addColorStop(0.5, '#0b1830');
+        bg.addColorStop(1, '#070f20');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
 
-  // 6d. Crimson Blood & Sludge Floor Drag Trail (leading out of breached containment pods)
-  const [bdCanvas, bdCtx] = makeCanvas(256, 512);
-  bdCtx.clearRect(0, 0, 256, 512);
-  for (let i = 0; i < 6; i++) {
-    const x = 58 + i * 26 + Math.sin(i * 1.9) * 8;
-    const grad = bdCtx.createLinearGradient(x, 20, x, 495);
-    grad.addColorStop(0, 'rgba(135, 12, 16, 0.88)');
-    grad.addColorStop(0.55, 'rgba(92, 8, 12, 0.65)');
-    grad.addColorStop(1, 'rgba(40, 4, 6, 0)');
-    bdCtx.fillStyle = grad;
-    bdCtx.fillRect(x - 6, 20, 12 + (i % 2) * 6, 475);
-  }
-  for (let s = 0; s < 24; s++) {
-    const sx = 30 + ((s * 43) % 196);
-    const sy = 30 + ((s * 83) % 440);
-    bdCtx.fillStyle = 'rgba(155, 16, 20, 0.72)';
-    bdCtx.beginPath();
-    bdCtx.arc(sx, sy, 3 + (s % 6) * 2.5, 0, Math.PI * 2);
-    bdCtx.fill();
-  }
-  const bloodDragTrail = configureTexture(bdCanvas, maxAnisotropy);
-  allTextures.push(bloodDragTrail);
+        // Sleek brushed metallic micro-sheen
+        for (let i = 0; i < 64; i++) {
+          ctx.fillStyle = i % 2 === 0 ? 'rgba(56, 189, 248, 0.025)' : 'rgba(14, 165, 233, 0.015)';
+          ctx.fillRect(0, i * 8, w, 2);
+        }
 
-  // 6e. Vivid Bloody Palm Prints, Frantic Claw Drag Marks & Fingerprints
-  const [fpCanvas, fpCtx] = makeCanvas(512, 512);
-  fpCtx.clearRect(0, 0, 512, 512);
-  const drawHandprint = (cx: number, cy: number, scale: number, rot: number, stainColor: string) => {
-    fpCtx.save();
-    fpCtx.translate(cx, cy);
-    fpCtx.rotate(rot);
-    fpCtx.scale(scale, scale);
-    fpCtx.fillStyle = stainColor;
-    fpCtx.beginPath();
-    fpCtx.ellipse(0, 16, 28, 32, 0, 0, Math.PI * 2);
-    fpCtx.fill();
-    const fingers: Array<[number, number, number, number]> = [
-      [-30, -4, 7.5, 20],
-      [-15, -30, 7.5, 26],
-      [0, -36, 8, 29],
-      [16, -28, 7.5, 25],
-      [29, -15, 7, 19],
-    ];
-    for (const [fx, fy, rx, ry] of fingers) {
-      fpCtx.beginPath();
-      fpCtx.ellipse(fx, fy, rx, ry, 0, 0, Math.PI * 2);
-      fpCtx.fill();
-      // Long frantic downward claw drag streaks
-      fpCtx.fillRect(fx - 3, fy, 6, 86);
-    }
-    fpCtx.restore();
-  };
+        // Beveled 2x2 architectural deck tiles
+        ctx.strokeStyle = '#142b4d';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 0);
+        ctx.lineTo(w / 2, h);
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
 
-  drawHandprint(145, 195, 1.38, -0.16, 'rgba(185, 18, 22, 0.78)');
-  drawHandprint(355, 265, 1.25, 0.22, 'rgba(153, 14, 18, 0.68)');
-  drawHandprint(255, 120, 0.95, 0.08, 'rgba(132, 204, 22, 0.56)');
-  for (const [fx, fy, col] of [
-    [88, 360, 'rgba(205, 22, 26, 0.7)'],
-    [112, 345, 'rgba(205, 22, 26, 0.62)'],
-    [136, 355, 'rgba(205, 22, 26, 0.56)'],
-    [390, 120, 'rgba(163, 230, 53, 0.62)'],
-    [412, 136, 'rgba(163, 230, 53, 0.52)'],
-    [220, 410, 'rgba(185, 28, 28, 0.58)'],
-    [244, 398, 'rgba(185, 28, 28, 0.52)'],
-  ] as Array<[number, number, string]>) {
-    fpCtx.strokeStyle = col;
-    fpCtx.lineWidth = 2.4;
-    for (let r = 4; r <= 13; r += 3.5) {
-      fpCtx.beginPath();
-      fpCtx.ellipse(fx, fy, r * 0.72, r, 0.2, 0, Math.PI * 2);
-      fpCtx.stroke();
-    }
-  }
-  const fingerprintsOverlay = configureTexture(fpCanvas, maxAnisotropy);
-  allTextures.push(fingerprintsOverlay);
+        // Luminous recessed cyan micro-seams & corner locks
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.36)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(18, 18, w / 2 - 36, h / 2 - 36);
+        ctx.strokeRect(w / 2 + 18, 18, w / 2 - 36, h / 2 - 36);
+        ctx.strokeRect(18, h / 2 + 18, w / 2 - 36, h / 2 - 36);
+        ctx.strokeRect(w / 2 + 18, h / 2 + 18, w / 2 - 36, h / 2 - 36);
 
-  // 6f. Cracked Failed Bio-Specimen Warning Plate
-  const [spCanvas, spCtx] = makeCanvas(256, 128);
-  spCtx.fillStyle = '#180507';
-  spCtx.fillRect(0, 0, 256, 128);
-  spCtx.strokeStyle = '#dc2626';
-  spCtx.lineWidth = 5;
-  spCtx.strokeRect(6, 6, 244, 116);
-  spCtx.fillStyle = '#ef4444';
-  spCtx.font = 'bold 20px monospace';
-  spCtx.textAlign = 'center';
-  spCtx.fillText('CONTAINMENT BREACH', 128, 46);
-  spCtx.fillStyle = '#fca5a5';
-  spCtx.font = 'bold 16px monospace';
-  spCtx.fillText('FAILED SPECIMEN', 128, 78);
-  spCtx.fillStyle = '#a3e635';
-  spCtx.font = '13px monospace';
-  spCtx.fillText('DO NOT APPROACH · BIO-LEAK', 128, 106);
-  const specimenWarning = configureTexture(spCanvas, maxAnisotropy);
-  allTextures.push(specimenWarning);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.65)';
+        for (const cx of [14, w / 2 - 14, w / 2 + 14, w - 14]) {
+          for (const cy of [14, h / 2 - 14, h / 2 + 14, h - 14]) {
+            ctx.fillRect(cx - 2, cy - 2, 4, 4);
+          }
+        }
+      },
+      maxAnisotropy,
+      17,
+      16
+    )
+  );
 
-  // 6g. Soft Volumetric Mist Sprite Texture (for thick eerie floor fog & toxic vapor)
-  const [fogCanvas, fogCtx] = makeCanvas(128, 128);
-  const fGrad = fogCtx.createRadialGradient(64, 64, 4, 64, 64, 62);
-  fGrad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
-  fGrad.addColorStop(0.4, 'rgba(210, 235, 220, 0.35)');
-  fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  fogCtx.fillStyle = fGrad;
-  fogCtx.fillRect(0, 0, 128, 128);
-  const fogSprite = configureTexture(fogCanvas, maxAnisotropy);
-  allTextures.push(fogSprite);
+  // 2. Sculpted Deep-Navy & Brushed Titanium Wall Bulkhead Panels (Ref Image 2 & 3)
+  const wall = register(
+    makeCanvasTexture(
+      512,
+      512,
+      (ctx, w, h) => {
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, '#0a1529');
+        grad.addColorStop(0.45, '#13223d');
+        grad.addColorStop(0.55, '#101d36');
+        grad.addColorStop(1, '#091121');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
 
-  // 6h. Scrawled Desperate Bloody Wall Warnings
-  const makeScrawl = (line1: string, line2: string) => {
-    const [scCanvas, scCtx] = makeCanvas(512, 256);
-    scCtx.clearRect(0, 0, 512, 256);
-    scCtx.save();
-    scCtx.translate(256, 118);
-    scCtx.rotate(-0.06);
-    scCtx.textAlign = 'center';
-    scCtx.fillStyle = 'rgba(185, 16, 20, 0.88)';
-    scCtx.font = 'bold 46px monospace';
-    scCtx.fillText(line1, 0, -10);
-    scCtx.fillStyle = 'rgba(148, 12, 16, 0.82)';
-    scCtx.font = 'bold 34px monospace';
-    scCtx.fillText(line2, 0, 44);
-    scCtx.restore();
-    // Dripping blood streaks from letters
-    for (let d = 0; d < 18; d++) {
-      const dx = 68 + ((d * 29) % 380);
-      const dy = 110 + (d % 3) * 28;
-      const dLen = 28 + (d % 5) * 18;
-      const g = scCtx.createLinearGradient(dx, dy, dx, dy + dLen);
-      g.addColorStop(0, 'rgba(170, 14, 18, 0.78)');
-      g.addColorStop(1, 'rgba(90, 5, 8, 0)');
-      scCtx.fillStyle = g;
-      scCtx.fillRect(dx, dy, 3 + (d % 3), dLen);
-    }
-    const tex = configureTexture(scCanvas, maxAnisotropy);
-    allTextures.push(tex);
-    return tex;
-  };
+        // Recessed titanium cladding ribs
+        ctx.strokeStyle = '#213659';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(10, 12, w - 20, h - 24);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 12);
+        ctx.lineTo(w / 2, h - 12);
+        ctx.moveTo(10, h * 0.28);
+        ctx.lineTo(w - 10, h * 0.28);
+        ctx.moveTo(10, h * 0.72);
+        ctx.lineTo(w - 10, h * 0.72);
+        ctx.stroke();
 
-  const horrorWallScrawls = [
-    makeScrawl("DON'T LOOK UP", 'IT IS WATCHING'),
-    makeScrawl('BREACH 2045', 'DO NOT BREATHE'),
-    makeScrawl('5 KEYS OR DIE', 'GET OUT NOW'),
-  ];
+        // Crisp cyan & indigo architectural trim conduits
+        ctx.fillStyle = '#0ea5e9';
+        ctx.fillRect(10, h * 0.72 - 4, w - 20, 4);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(10, h * 0.28 - 2, w - 20, 2);
 
-  // 7. Vault Header Signs
-  const vaultMeta: Array<{ id: number; code: string; title: string; color: string }> = [
-    { id: 1, code: 'VAULT 01', title: 'THE BIOACTIVITY ARCHIVE', color: '#06b6d4' },
-    { id: 2, code: 'VAULT 02', title: 'THE SMILES LABORATORY', color: '#38bdf8' },
-    { id: 3, code: 'VAULT 03', title: 'THE MOLECULAR DETECTIVE', color: '#2dd4bf' },
-    { id: 4, code: 'VAULT 04', title: 'AI PREDICTION CHAMBER', color: '#818cf8' },
-    { id: 5, code: 'VAULT 05', title: 'FINAL RESEARCH MISSION', color: '#10b981' },
-  ];
+        // Precision micro-vent louvers
+        ctx.fillStyle = '#060c18';
+        for (let i = 0; i < 6; i++) {
+          ctx.fillRect(42, h * 0.78 + i * 11, 140, 5);
+          ctx.fillRect(w - 182, h * 0.78 + i * 11, 140, 5);
+        }
+      },
+      maxAnisotropy,
+      12,
+      2
+    )
+  );
 
-  const vaultSigns = new Map<number, THREE.CanvasTexture>();
-  for (const vm of vaultMeta) {
-    const [vCanvas, vCtx] = makeCanvas(512, 144);
-    vCtx.fillStyle = '#0a1222';
-    vCtx.fillRect(0, 0, 512, 144);
-    vCtx.strokeStyle = vm.color;
-    vCtx.lineWidth = 4;
-    vCtx.strokeRect(8, 8, 496, 128);
-    vCtx.fillStyle = vm.color;
-    vCtx.font = 'bold 34px monospace';
-    vCtx.textAlign = 'center';
-    vCtx.fillText(vm.code, 256, 62);
-    vCtx.fillStyle = '#e2e8f0';
-    vCtx.font = 'bold 20px monospace';
-    vCtx.fillText(vm.title, 256, 106);
-    const tex = configureTexture(vCanvas, maxAnisotropy);
-    vaultSigns.set(vm.id, tex);
-    allTextures.push(tex);
+  // 3. Standard Scientific Monitor
+  const monitorNormal = register(
+    makeCanvasTexture(
+      512,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#041022';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#08223d';
+        ctx.fillRect(14, 14, w - 28, 38);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('BIOQUEST · MOLECULAR TELEMETRY OS', 26, 39);
+
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i - Math.PI / 6;
+          const x = 115 + Math.cos(a) * 56;
+          const y = 175 + Math.sin(a) * 56;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let x = 210; x < 475; x += 10) {
+          const y = 148 + Math.sin((x - 210) * 0.048) * 32 + Math.cos(x * 0.025) * 10;
+          if (x === 210) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '14px monospace';
+        ctx.fillText('ASSAY PIPELINE: NOMINAL', 210, 224);
+        ctx.fillText('IC50 VALIDATION: PENDING', 210, 248);
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('NEXUS GUARDIAN: ONLINE', 210, 274);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 4. Emergency Lockdown Monitor
+  const monitorAlert = register(
+    makeCanvasTexture(
+      512,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#18050b';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#991b1b';
+        ctx.fillRect(16, 16, w - 32, 46);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 21px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('EMERGENCY LOCKDOWN ACTIVE', w / 2, 47);
+
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText('UNAUTHORIZED TRANSFER', w / 2, 134);
+        ctx.fillText('BLOCKED BY NEXUS AI', w / 2, 168);
+
+        ctx.fillStyle = '#fde047';
+        ctx.font = '15px monospace';
+        ctx.fillText('ALL 5 RESEARCH VAULTS SEALED', w / 2, 228);
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillText('INVESTIGATOR AUDIT REQUIRED', w / 2, 260);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 5. Scene 1 Monitor — Confidential Drug Record (Compound BQ-X9)
+  const drugRecordNormal = register(
+    makeCanvasTexture(
+      512,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#051024';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#0f2847';
+        ctx.fillRect(14, 14, w - 28, 36);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('RESTRICTED DRUG ARCHIVE · COMPOUND BQ-X9', 24, 38);
+
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i;
+          const x = 104 + Math.cos(a) * 48;
+          const y = 160 + Math.sin(a) * 48;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.fillStyle = '#e0f2fe';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('COMPOUND ID: BQ-X9 (EXPERIMENTAL)', 202, 92);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '13px monospace';
+        ctx.fillText('MW: 418.4 Da   LogP: 3.12', 202, 122);
+        ctx.fillText('IC50 (PRELIM): 18.4 nM', 202, 146);
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('TOXICOLOGY: UNVERIFIED', 202, 186);
+        ctx.fillText('PUBLICATION CLEARANCE: DENIED', 202, 212);
+        ctx.fillStyle = '#c084fc';
+        ctx.fillText('STATUS: LEVEL-5 RESTRICTED', 202, 250);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 6. Scene 1b Monitor — Unauthorized External Transfer Bypass
+  const drugTransferAttempt = register(
+    makeCanvasTexture(
+      512,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#14081d';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(14, 14, w - 28, 38);
+        ctx.fillStyle = '#fef3c7';
+        ctx.font = 'bold 17px monospace';
+        ctx.fillText('WARNING: SAFETY VALIDATION INCOMPLETE', 24, 39);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('EXTERNAL DRUG PUBLICATION BYPASS', 24, 96);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '14px monospace';
+        ctx.fillText('TARGET: UNAPPROVED PUBLIC RELEASE', 24, 128);
+        ctx.fillText('AUTHORIZATION OVERRIDE: FORCED', 24, 154);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(24, 188, w - 48, 28);
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(24, 188, (w - 48) * 0.78, 28);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('EXPORTING BQ-X9 PACKAGE... 78%', 116, 207);
+
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 15px monospace';
+        ctx.fillText('NEXUS ANOMALY SCAN TRIGGERED...', 24, 266);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 7. Scene 2 Monitor — NEXUS Breach Intercept
+  const securityBreachAlert = register(
+    makeCanvasTexture(
+      512,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#1e0409';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(14, 14, w - 28, 46);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('NEXUS SECURITY INTERCEPT', w / 2, 44);
+
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText('UNAUTHORIZED DRUG DATA', w / 2, 128);
+        ctx.fillText('TRANSFER DETECTED', w / 2, 160);
+
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('UPLINK TERMINATED · RELEASE BLOCKED', w / 2, 214);
+        ctx.fillStyle = '#f87171';
+        ctx.fillText('EMERGENCY LOCKDOWN INITIATED', w / 2, 258);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 8. Ref Image 4 — Crimson Padlock Cracked Security Display!
+  const breachPadlockDisplay = register(
+    makeCanvasTexture(
+      512,
+      384,
+      (ctx, w, h) => {
+        const bg = ctx.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, 290);
+        bg.addColorStop(0, '#2a0616');
+        bg.addColorStop(0.65, '#0c081c');
+        bg.addColorStop(1, '#040610');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+
+        // Hex/grid glow backdrop
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+        ctx.lineWidth = 1.5;
+        for (let x = 0; x < w; x += 28) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 28) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+
+        // Digital shatter crack lines radiating from center
+        ctx.strokeStyle = 'rgba(147, 197, 253, 0.45)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 10; i++) {
+          const a = (Math.PI * 2 * i) / 10 + 0.2;
+          ctx.beginPath();
+          ctx.moveTo(w / 2, h / 2);
+          ctx.lineTo(w / 2 + Math.cos(a) * 110, h / 2 + Math.sin(a) * 90);
+          ctx.lineTo(w / 2 + Math.cos(a + 0.14) * 230, h / 2 + Math.sin(a + 0.14) * 190);
+          ctx.stroke();
+        }
+
+        // Glowing crimson digital padlock icon (Ref Image 4 centerpiece!)
+        ctx.strokeStyle = '#ff2a5f';
+        ctx.lineWidth = 16;
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2 - 42, 46, Math.PI, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ff1e56';
+        ctx.fillRect(w / 2 - 72, h / 2 - 36, 144, 114);
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(w / 2 - 72, h / 2 - 36, 144, 114);
+
+        // Keyhole silhouette
+        ctx.fillStyle = '#12030a';
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2 + 12, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(w / 2 - 8, h / 2 + 18, 16, 36);
+
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = 'bold 17px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('NEXUS LOCKOUT · COMPOUND BQ-X9 SEALED', w / 2, h - 24);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 9. Ref Image 2 — Octagonal BioQuest Hex Emblem Display
+  const bioquestHexDisplay = register(
+    makeCanvasTexture(
+      512,
+      384,
+      (ctx, w, h) => {
+        const bg = ctx.createRadialGradient(w / 2, h / 2, 15, w / 2, h / 2, 280);
+        bg.addColorStop(0, '#073552');
+        bg.addColorStop(0.6, '#041a30');
+        bg.addColorStop(1, '#020b18');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+
+        // Dot matrix pattern
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.22)';
+        for (let x = 24; x < w - 24; x += 18) {
+          for (let y = 24; y < h - 24; y += 18) {
+            ctx.fillRect(x, y, 2, 2);
+          }
+        }
+
+        // Octagonal bright cyan bezel border
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 10;
+        const cut = 52;
+        ctx.beginPath();
+        ctx.moveTo(cut, 14);
+        ctx.lineTo(w - cut, 14);
+        ctx.lineTo(w - 14, cut);
+        ctx.lineTo(w - 14, h - cut);
+        ctx.lineTo(w - cut, h - 14);
+        ctx.lineTo(cut, h - 14);
+        ctx.lineTo(14, h - cut);
+        ctx.lineTo(14, cut);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Crisp BioQuest hexagonal spiral emblem
+        ctx.strokeStyle = '#e0f2fe';
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i - Math.PI / 6;
+          const x = w / 2 + Math.cos(a) * 72;
+          const y = h / 2 - 10 + Math.sin(a) * 72;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2 - 10, 32, 0.3, Math.PI * 1.8);
+        ctx.stroke();
+
+        ctx.fillStyle = '#7dd3fc';
+        ctx.font = 'bold 18px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BIOQUEST RESEARCH SYSTEMS · SECTOR 01', w / 2, h - 42);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 10. Ref Image 2 — Biometric / Pharmacokinetics Anatomy Wall Display
+  const biometricScanDisplay = register(
+    makeCanvasTexture(
+      768,
+      440,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#031526';
+        ctx.fillRect(0, 0, w, h);
+
+        // Octagonal cyan border
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 10;
+        const c = 44;
+        ctx.beginPath();
+        ctx.moveTo(c, 12);
+        ctx.lineTo(w - c, 12);
+        ctx.lineTo(w - 12, c);
+        ctx.lineTo(w - 12, h - c);
+        ctx.lineTo(w - c, h - 12);
+        ctx.lineTo(c, h - 12);
+        ctx.lineTo(12, h - c);
+        ctx.lineTo(12, c);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 24px monospace';
+        ctx.fillText('PHARMACOKINETICS & ADMET RESPONSE', 48, 58);
+
+        // Left telemetry readout bars
+        ctx.fillStyle = '#bae6fd';
+        ctx.font = '16px monospace';
+        const metrics = [
+          ['BIOAVAILABILITY', 0.86],
+          ['BBB PERMEABILITY', 0.62],
+          ['HEPATIC CLEARANCE', 0.74],
+          ['HERG CARDIOTOXICITY', 0.91],
+          ['TARGET AFFINITY', 0.82],
+        ] as const;
+        metrics.forEach(([label, val], idx) => {
+          const y = 108 + idx * 54;
+          ctx.fillStyle = '#7dd3fc';
+          ctx.fillText(label, 48, y);
+          ctx.fillStyle = '#0c2a44';
+          ctx.fillRect(48, y + 10, 260, 14);
+          ctx.fillStyle = val > 0.88 ? '#34d399' : '#22d3ee';
+          ctx.fillRect(48, y + 10, 260 * val, 14);
+        });
+
+        // Two glowing anatomical/receptor silhouettes (Ref Image 2 right wall)
+        const drawBodyScan = (cx: number) => {
+          ctx.strokeStyle = '#67e8f9';
+          ctx.fillStyle = 'rgba(34, 211, 238, 0.25)';
+          ctx.lineWidth = 3;
+          // Head
+          ctx.beginPath();
+          ctx.arc(cx, 128, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          // Torso
+          ctx.beginPath();
+          ctx.roundRect(cx - 28, 156, 56, 98, 12);
+          ctx.fill();
+          ctx.stroke();
+          // Arms
+          ctx.beginPath();
+          ctx.moveTo(cx - 32, 166);
+          ctx.lineTo(cx - 52, 248);
+          ctx.moveTo(cx + 32, 166);
+          ctx.lineTo(cx + 52, 248);
+          // Legs
+          ctx.moveTo(cx - 14, 256);
+          ctx.lineTo(cx - 22, 356);
+          ctx.moveTo(cx + 14, 256);
+          ctx.lineTo(cx + 22, 356);
+          ctx.stroke();
+          // Target receptor highlight rings
+          ctx.strokeStyle = '#34d399';
+          ctx.beginPath();
+          ctx.arc(cx, 194, 16, 0, Math.PI * 2);
+          ctx.stroke();
+        };
+        drawBodyScan(465);
+        drawBodyScan(625);
+
+        ctx.fillStyle = '#67e8f9';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('CLINICAL PHASE I · PRE-VALIDATION TELEMETRY', 48, h - 34);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 11. Ref Image 1 — Glowing Holographic Projection Pad Texture
+  const holoPadDisplay = register(
+    makeCanvasTexture(
+      512,
+      512,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#031226';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(18, 18, w - 36, h - 36);
+
+        const cx = w / 2;
+        const cy = h / 2;
+        const grad = ctx.createRadialGradient(cx, cy, 12, cx, cy, 210);
+        grad.addColorStop(0, 'rgba(103, 232, 249, 0.92)');
+        grad.addColorStop(0.35, 'rgba(14, 165, 233, 0.45)');
+        grad.addColorStop(0.75, 'rgba(14, 165, 233, 0.14)');
+        grad.addColorStop(1, 'rgba(3, 18, 38, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = '#67e8f9';
+        ctx.lineWidth = 4;
+        for (const r of [56, 112, 168, 206]) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Precision tick marks
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 24; i++) {
+          const a = (Math.PI * 2 * i) / 24;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * 140, cy + Math.sin(a) * 140);
+          ctx.lineTo(cx + Math.cos(a) * 165, cy + Math.sin(a) * 165);
+          ctx.stroke();
+        }
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 12. Large Wall Display — Molecular Research & Drug Discovery Analytics
+  const molecularWallScreen = register(
+    makeCanvasTexture(
+      768,
+      384,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#051024';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#0b2244';
+        ctx.fillRect(14, 14, w - 28, 46);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText('MOLECULAR RESEARCH WING · SMILES & LIPINSKI LAB', 28, 45);
+
+        const drawHex = (cx: number, cy: number, r: number, col: string) => {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = (Math.PI / 3) * i;
+            const x = cx + Math.cos(a) * r;
+            const y = cy + Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        };
+        drawHex(135, 195, 58, '#22d3ee');
+        drawHex(236, 195, 58, '#34d399');
+        drawHex(185, 280, 44, '#c084fc');
+
+        ctx.fillStyle = '#e0f2fe';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('ACTIVE CANDIDATE: BQ-X9-A', 355, 112);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '15px monospace';
+        ctx.fillText('SMILES: CC(=O)Nc1ccc(O)cc1', 355, 146);
+        ctx.fillText('MW <= 500 Da · LogP <= 5', 355, 178);
+        ctx.fillText('HBD <= 5 · HBA <= 10 · TPSA 64 Å²', 355, 210);
+
+        const barVals = [0.72, 0.88, 0.64, 0.94, 0.56, 0.82];
+        barVals.forEach((v, idx) => {
+          const bx = 355 + idx * 58;
+          const bh = v * 92;
+          ctx.fillStyle = idx % 2 === 0 ? '#0ea5e9' : '#a855f7';
+          ctx.fillRect(bx, 336 - bh, 36, bh);
+        });
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 13. Experimental Drug Storage Wall Display
+  const drugStorageDisplay = register(
+    makeCanvasTexture(
+      640,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#070f22';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#1e1038';
+        ctx.fillRect(14, 14, w - 28, 42);
+        ctx.fillStyle = '#d8b4fe';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('EXPERIMENTAL DRUG STORAGE · CRYO-BAY B', 26, 42);
+
+        const items = [
+          ['BQ-X9 · PHASE I', 'SEALED · AUDIT REQUIRED', '#f87171'],
+          ['BQ-104 · KINASE', 'VALIDATED · -80°C', '#34d399'],
+          ['BQ-219 · PROTEASE', 'IN ASSAY · -80°C', '#38bdf8'],
+          ['BQ-311 · CONTROL', 'ARCHIVE LOCKED', '#c084fc'],
+        ];
+        items.forEach(([name, status, col], idx) => {
+          const y = 104 + idx * 50;
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 17px monospace';
+          ctx.fillText(name, 30, y);
+          ctx.fillStyle = col;
+          ctx.font = '15px monospace';
+          ctx.fillText(status, 270, y);
+        });
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 14. AI Monitoring Room Wall Display
+  const aiMonitorWall = register(
+    makeCanvasTexture(
+      768,
+      384,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#050d1e';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#0a203e';
+        ctx.fillRect(14, 14, w - 28, 44);
+        ctx.fillStyle = '#22d3ee';
+        ctx.font = 'bold 21px monospace';
+        ctx.fillText('NEXUS AI MONITORING · XGBOOST PREDICTIVE CORE', 26, 44);
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        for (let i = 0; i < 4; i++) {
+          for (let j = 0; j < 3; j++) {
+            ctx.beginPath();
+            ctx.moveTo(95, 110 + i * 62);
+            ctx.lineTo(240, 140 + j * 70);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = '#38bdf8';
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath();
+          ctx.arc(95, 110 + i * 62, 11, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#c084fc';
+        for (let j = 0; j < 3; j++) {
+          ctx.beginPath();
+          ctx.arc(240, 140 + j * 70, 12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = '#e0f2fe';
+        ctx.font = 'bold 17px monospace';
+        ctx.fillText('SECURITY AUDIT LOG · LIVE', 330, 116);
+        ctx.fillStyle = '#f87171';
+        ctx.font = '15px monospace';
+        ctx.fillText('[23:48] UNAPPROVED BQ-X9 EXPORT HALTED', 330, 158);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('[23:49] EMERGENCY LOCKDOWN ENGAGED', 330, 194);
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('[23:54] INVESTIGATOR CLEARANCE GRANTED', 330, 230);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('MODEL R² ACCURACY: 0.94 · FEATURE SYNC OK', 330, 286);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 15. Secure Research Archive Wall Display
+  const archiveWallDisplay = register(
+    makeCanvasTexture(
+      640,
+      320,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#060e20';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+
+        ctx.fillStyle = '#151c44';
+        ctx.fillRect(14, 14, w - 28, 42);
+        ctx.fillStyle = '#a5b4fc';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('SECURE RESEARCH ARCHIVE · VAULTS 01–05', 26, 42);
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '15px monospace';
+        ctx.fillText('V01 · BIOACTIVITY ARCHIVE (IC50)', 28, 102);
+        ctx.fillText('V02 · SMILES LABORATORY', 28, 140);
+        ctx.fillText('V03 · MOLECULAR DETECTIVE (LIPINSKI)', 28, 178);
+        ctx.fillText('V04 · AI PREDICTION CHAMBER (XGBOOST)', 28, 216);
+        ctx.fillText('V05 · FINAL RESEARCH DECISION', 28, 254);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 16. Main Gate Screens
+  const exitLocked = register(
+    makeCanvasTexture(
+      512,
+      256,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#1a060c';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('SECURITY LOCKDOWN', w / 2, 74);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('BIOQUEST MAIN GATE SEALED', w / 2, 128);
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '17px monospace';
+        ctx.fillText('VERIFY ALL 5 RESEARCH VAULTS', w / 2, 186);
+      },
+      maxAnisotropy
+    )
+  );
+
+  const exitRestored = register(
+    makeCanvasTexture(
+      512,
+      256,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#051f1c';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(8, 8, w - 16, h - 16);
+        ctx.fillStyle = '#34d399';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('LOCKDOWN LIFTED', w / 2, 74);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('5/5 AUTHENTICATION KEYS VERIFIED', w / 2, 128);
+        ctx.fillStyle = '#a7f3d0';
+        ctx.font = '17px monospace';
+        ctx.fillText('GATEWAY TO FUTURE CITY OPEN', w / 2, 186);
+      },
+      maxAnisotropy
+    )
+  );
+
+  // 17. Future City Plaza, Road & Sidewalk Textures (Preserved)
+  const plazaGround = register(
+    makeCanvasTexture(
+      512,
+      512,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#dde5ee';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#c5d2e0';
+        ctx.lineWidth = 3;
+        const step = 64;
+        for (let x = 0; x <= w; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= h; y += step) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.16)';
+        ctx.fillRect(0, h / 2 - 6, w, 12);
+      },
+      maxAnisotropy,
+      14,
+      14
+    )
+  );
+
+  const cityRoad = register(
+    makeCanvasTexture(
+      512,
+      512,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#232b38';
+        ctx.fillRect(0, 0, w, h);
+        for (let i = 0; i < 700; i++) {
+          ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.08)';
+          ctx.fillRect(Math.random() * w, Math.random() * h, 3, 3);
+        }
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(14, 0, 8, h);
+        ctx.fillRect(w - 22, 0, 8, h);
+        ctx.fillStyle = '#facc15';
+        for (let y = 18; y < h; y += 72) {
+          ctx.fillRect(w / 2 - 6, y, 12, 42);
+        }
+      },
+      maxAnisotropy,
+      1,
+      10
+    )
+  );
+
+  const citySidewalk = register(
+    makeCanvasTexture(
+      256,
+      256,
+      (ctx, w, h) => {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 0);
+        ctx.lineTo(w / 2, h);
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+      },
+      maxAnisotropy,
+      8,
+      8
+    )
+  );
+
+  // 18. Vault Header Signs (Vaults 01–05)
+  const vaultSigns = new Map<VaultId, THREE.CanvasTexture>();
+  for (const v of VAULTS) {
+    const tex = register(
+      makeCanvasTexture(
+        512,
+        160,
+        (ctx, w, h) => {
+          ctx.fillStyle = '#061124';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = v.accentHex;
+          ctx.lineWidth = 6;
+          ctx.strokeRect(6, 6, w - 12, h - 12);
+
+          ctx.fillStyle = v.accentHex;
+          ctx.font = 'bold 26px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${v.code.toUpperCase()} · ${v.wing.toUpperCase()}`, w / 2, 54);
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = 'bold 30px sans-serif';
+          ctx.fillText(v.title, w / 2, 114);
+        },
+        maxAnisotropy
+      )
+    );
+    vaultSigns.set(v.id, tex);
   }
 
   return {
     floor,
     wall,
-    plazaGround,
     monitorNormal,
-    monitorGlitch,
+    monitorAlert,
+    drugRecordNormal,
+    drugTransferAttempt,
+    securityBreachAlert,
+    breachPadlockDisplay,
+    molecularWallScreen,
+    biometricScanDisplay,
+    bioquestHexDisplay,
+    holoPadDisplay,
+    drugStorageDisplay,
+    aiMonitorWall,
+    archiveWallDisplay,
     exitLocked,
     exitRestored,
-    chemicalSpillGreen,
-    chemicalSpillAmber,
-    bloodDragTrail,
-    fingerprintsOverlay,
-    specimenWarning,
-    fogSprite,
-    horrorWallScrawls,
+    plazaGround,
+    cityRoad,
+    citySidewalk,
     vaultSigns,
-    dispose: () => {
-      allTextures.forEach((t) => t.dispose());
+    disposeAll: () => {
+      for (const t of created) {
+        t.dispose();
+      }
     },
   };
 }
